@@ -39,6 +39,32 @@ data class Capacity(val weekdayMinutes: Int? = null, val weekendMinutes: Int? = 
     val isSet: Boolean get() = weekdayMinutes != null || weekendMinutes != null
 }
 
+/** Which parts of the Today screen show, and which are folded. */
+@Serializable
+data class TodayLayout(
+    val showProgress: Boolean = true,
+    val showFocus: Boolean = true,
+    val showMissed: Boolean = true,
+    val showWeekPlanner: Boolean = true,
+    val showFilters: Boolean = true,
+    /** Folded sections: "progress", "focus", "missed", "slot:MORNING", ... */
+    val collapsed: Set<String> = setOf("progress"),
+)
+
+/** What each task card on Today shows. Compact cards show only the first line until opened. */
+@Serializable
+data class CardLayout(
+    val expandedByDefault: Boolean = false,
+    val showIcon: Boolean = true,
+    val showDetails: Boolean = true,
+    val showIdeal: Boolean = true,
+    val showMinimum: Boolean = true,
+    val showMinutes: Boolean = true,
+    val showQuickDone: Boolean = true,
+    val showMove: Boolean = true,
+    val showSkip: Boolean = true,
+)
+
 enum class AiMode(val label: String) {
     GEMINI("Google Gemini"),
     SERVER("Ascend AI server (Claude)"),
@@ -91,6 +117,8 @@ data class AppSettings(
     val widgetHintDismissed: Boolean = false,
     /** Customised "Build my plan" starter prompts; null means the built-in ones. */
     val promptTemplates: List<app.levelup2027.ai.PromptTemplate>? = null,
+    val todayLayout: TodayLayout = TodayLayout(),
+    val cardLayout: CardLayout = CardLayout(),
 ) {
     fun isLowEnergy(today: LocalDate) = lowEnergyDate == today
 

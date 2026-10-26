@@ -27,8 +27,8 @@ android {
         applicationId = "app.levelup2027"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "2.1.0"
+        versionCode = 4
+        versionName = "2.2.0"
         // The Ascend AI server (worker/). Set ascendAiServerUrl in local.properties or gradle.properties;
         // empty means server mode is unavailable and users can bring their own API key instead.
         val aiServer = (localProps.getProperty("ascendAiServerUrl") ?: (project.findProperty("ascendAiServerUrl") as String?) ?: "")
