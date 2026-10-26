@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Ascend</string>
+    <string name="widget_name">Ascend: today</string>
+    <string name="widget_description">Today\'s tasks. Tap a circle to complete; resize for more tasks.</string>
+    <string name="channel_reminders">Checklist reminders</string>
+    <string name="channel_reminders_desc">A few daily nudges (morning, during work, evening) and the Sunday review.</string>
+</resources>
