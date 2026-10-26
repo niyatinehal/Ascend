@@ -8,14 +8,14 @@ Version 2.0 grew out of the personal *Level Up 2027* checklist. All of that app'
 
 Stack: Kotlin · Jetpack Compose (Material 3) · Room · DataStore · Jetpack Glance (widget) · Anthropic Java SDK (own-key mode) · Cloudflare Worker + Anthropic TypeScript SDK (server mode).
 
-- **APK:** `dist/Ascend-2.0.0.apk` (release build, R8-shrunk, about 7 MB, signed with the same key as 1.0, so it installs over it)
+- **APK:** `dist/Ascend-2.1.0.apk` (release build, R8-shrunk, about 7 MB, signed with the same key as 1.0, so it installs over it)
 - **Min Android:** 8.0 (API 26) · **Target:** Android 15 (API 35)
 
 ---
 
 ## 1. Install or update
 
-1. Copy `dist/Ascend-2.0.0.apk` to the phone and open it with Files or Downloads.
+1. Copy `dist/Ascend-2.1.0.apk` to the phone and open it with Files or Downloads.
 2. Allow **Install unknown apps** for that app if asked, then tap **Install**. If Play Protect warns you, choose **More details → Install anyway**.
 3. **Already using 1.0?** Install over it. The database migrates in place:
    - tasks, completions, goals, progress and reviews are kept
@@ -26,21 +26,36 @@ Back up the signing key (`keystore/levelup2027-release.jks` + `keystore.properti
 
 ## 2. Turn on AI planning
 
-AI is optional. Without it you can set up manually or load the example plan, and everything else works offline. There are two ways to connect:
+AI is optional. Without it you can set up manually or load the example plan, and everything else works offline. There are three ways to connect:
 
-| Mode | How it works | Who pays | Set up |
+| Mode | How it works | Cost | Set up |
 |---|---|---|---|
-| **Ascend AI server** (default) | The phone talks to a small Cloudflare Worker that holds the API key, picks the model and enforces per-device quotas | Whoever runs the server | Deploy `worker/` (see `worker/README.md`), then set the address |
-| **Own API key** | The phone calls the Claude API directly with the official Anthropic Java SDK | The key's owner, billed by Anthropic | Settings → AI → *My own Anthropic API key* → paste an `sk-ant-…` key |
+| **Google Gemini** (default) | The phone calls Gemini directly, using **the app's built-in keys** or the user's own keys, which take turns (round robin) | Free tier | Built-in keys: `geminiApiKeys` in `local.properties`, then rebuild. Users can add their own in Settings → AI |
+| **Ascend AI server (Claude)** | The phone talks to a small Cloudflare Worker that holds an Anthropic key, picks the model and enforces per-device quotas | Paid by whoever runs the server | Deploy `worker/` (see `worker/README.md`), then set the address |
+| **Anthropic Claude (own key)** | The phone calls the Claude API directly with the official Anthropic Java SDK | Paid by the key's owner | Settings → AI → paste an `sk-ant-…` key |
 
-**This APK has no server address built in.** Until you deploy the Worker, use own-key mode or enter a server address in Settings → AI.
+### Gemini keys: built-in and per user
 
-Before the first AI request, the app shows what will be shared and asks you to agree once.
+- **Built-in keys** (everyone with your APK can use AI with no setup):
+  1. Create free keys at [aistudio.google.com](https://aistudio.google.com) → *Get API key*.
+  2. Put them in `local.properties`, comma-separated: `geminiApiKeys=AIza...one,AIza...two`.
+  3. Rebuild with `./gradlew :app:assembleRelease`.
+  - `local.properties` is git-ignored, so the keys never reach GitHub.
+  - Each phone may make up to 60 requests a month on the shared keys.
+- **Users' own keys:** Settings → AI → *Google Gemini* → add one or more keys. They replace the built-in ones on that phone and remove the shared cap. To go back to the shared keys, remove them all.
+- **Round robin:** each request starts at the next key. A key that hits its rate limit rests for the time Google asks for, and the request moves straight on to the next key. A rejected key is skipped for a day. If every key is resting, the user is told when to try again.
+- **Limits are per Google Cloud project, not per key**, so only keys from *different* projects add capacity. Google's terms don't allow using multiple projects to get around rate limits, so treat extra keys as backups, not a way to multiply the free quota.
+- **Anyone who has the APK can extract keys built into it.** Use keys from projects **without billing enabled**: then the worst case is someone using up the free quota, never a bill.
+- **Free-tier privacy:** Google may use what is sent to improve its products, and people may review it. The consent screen tells users this.
+- **Models:** `gemini-3-flash-preview` for planning (a full plan in about 13 s in testing), then `gemini-3.6-flash`, `gemini-3.5-flash-lite` and `gemini-3.8-flash` if a model is busy or unavailable; `gemini-3.5-flash-lite` for the first questions. You can override the model in Settings → AI.
+
+Before the first AI request with each provider, the app shows what will be shared and asks the user to agree.
 
 ### Configuration and environment variables
 
 | Where | Name | Purpose |
 |---|---|---|
+| `local.properties` (app build) | `geminiApiKeys` | Comma-separated free-tier Gemini keys built into the APK (optional; users can add their own) |
 | `local.properties` (app build) | `ascendAiServerUrl` | Server address built into the APK (optional; can be set per phone instead) |
 | `local.properties` | `sdk.dir` | Android SDK path (already set) |
 | `keystore.properties` | `storeFile`, `storePassword`, `keyAlias`, `keyPassword` | Release signing (already set, never committed) |
@@ -53,7 +68,7 @@ No API key is stored in the app's source or the APK.
 
 ## 3. The new-user journey
 
-1. **Open the app → "What do you want to work toward?"** Type or dictate (🎤 uses the phone's speech recognizer). One goal or several, in your own words. For example: *"I want to get fit, change careers, learn Spanish, and start a small business. I work full-time and have about an hour free on weekdays."*
+1. **Open the app → "What do you want to work toward?"** Pick **one or more areas** (Fitness, Career change, Learn a language, Side business, Savings, Sleep, Exams…). Each adds an editable starter paragraph, and tapping it again removes the paragraph if you haven't changed it. Then edit, type or dictate (🎤) the details in your own words. For example: *"I want to get fit, change careers, learn Spanish, and start a small business. I work full-time and have about an hour free on weekdays."*
 2. **Up to three quick questions.** AI (Claude Haiku 5.5) extracts what it can and asks only what would change the plan. Every question can be skipped.
 3. **Draft plan.** Claude Sonnet 5.5 drafts it and the app validates it. The preview shows:
    - your interpreted goals, with measurable outcomes, baselines, targets and deadlines (assumed ones are labelled)
@@ -71,6 +86,10 @@ No API key is stored in the app's source or the APK.
 If a request fails (no network, quota, a bad response), you see why. What you typed is kept, because drafts are saved on the phone, and **Try again** picks up where you left off. Closing the screen keeps an unfinished draft; **Start over** discards it.
 
 "Set up without AI instead" offers an empty plan or the example *Level Up 2027* plan.
+
+### Customising the prompts
+- **Plan prompts** (Settings, or *Edit prompts* on the Build my plan screen): edit any area's starter text, rename it, add your own areas, delete some, or reset to the built-in ones. They're saved with your settings and included in backups.
+- **Your standing instructions** (Settings → AI): text added to every AI request, e.g. "No tasks before 7am. Weekends are for family. Use metric units." The AI follows it unless it conflicts with the safety rules. It goes in the request, not the system prompt, so the AI server's prompt allowlist still applies.
 
 ## 4. Daily use
 
@@ -129,7 +148,9 @@ The widget refreshes after every completion, plan change or accepted AI adjustme
   - goal titles, deadlines and priorities
   - task titles, times and durations for the next 7 days, plus your habits
   - counts of done, minimum and skipped tasks for the last 7 days
+- Also sent: your standing instructions, if you've written any.
 - **Never sent:** notes, progress entries, reviews, backups, your full history.
+- **Gemini free tier:** Google may use requests to improve its products. Use your own paid key or the Claude routes if that matters to you.
 - The AI server keeps only device tokens and request/token counters, not content.
 - **Own-key mode:** the key is encrypted with an Android Keystore key, kept in a private file excluded from cloud backup and device transfer, and isn't included in JSON backups.
 - **Settings → Delete all my data** erases everything on the phone, removes this device's record from the AI server, and can also remove the API key.
@@ -176,7 +197,7 @@ Built on this machine (OpenJDK 17, Gradle 8.11.1, AGP 8.7.3, Kotlin 2.0.21, SDK 
 | Check | Result |
 |---|---|
 | `./gradlew :app:assembleRelease` | ✅ signed APK (same key as 1.0), R8 shrinking |
-| `./gradlew :app:testDebugUnitTest` | ✅ **101 tests, 0 failures** |
+| `./gradlew :app:testDebugUnitTest` | ✅ **116 tests, 0 failures** |
 | `./gradlew :app:lintDebug` | ✅ 0 errors (14 warnings, same kinds as 1.0: newer library versions available, API-31-only widget attributes, one large vector preview, the v26 icon folder) |
 | `cd worker && npm test` | ✅ **8 tests, 0 failures** |
 | Worker bundle (esbuild with `nodejs_compat` externals, as wrangler does) | ✅ bundles, prompt allowlist embedded |
@@ -225,6 +246,9 @@ App test suites (`app/src/test`):
   - the server client: payload, token, re-registering on 401, error mapping
   - every JSON schema follows the structured-output rules
 - **AiServiceTest (6):** availability states, no request without consent, usage logging, own-key monthly cap, at most 3 questions, unreadable output, network failure, adjust context limited to one week and excluding notes.
+- **GeminiClientTest (7):** request shape against a mock `generateContent` (system instruction, roles, `responseJsonSchema`, key in a header, never in the URL), lighter model for intake, round robin across requests, a rate-limited key resting while the next key answers, all keys limited, invalid key skipped, model fallback on 404, thought parts skipped, truncated/blocked/empty answers.
+- **AiServiceGeminiTest (4):** built-in keys work with no setup and user keys replace them, no keys means not configured, the per-phone cap on shared keys, standing instructions added to the payload and not the system prompt.
+- **PromptTemplatesTest (4):** combining several areas, never deleting edited text, defaults, the 2.0 → 2.1 settings upgrade.
 - **PromptHashesTest (1):** the server's prompt allowlist matches the app's prompts.
 - **Earlier suites, updated:** ScheduleEngineTest (14), ProgressAndWidgetTest (10), SeedTest (12), RepositoryTest (11).
 
@@ -235,7 +259,7 @@ App test suites (`app/src/test`):
 | Plan validation, de-duplication, capacity, dependencies, change validation, daily planner, missed-task policy, rescheduling, completion history, migration, backup compatibility, widget state | ✅ unit-tested |
 | Request format and error handling of the SDK client and the server client | ✅ tested against local mock servers |
 | Worker routing, validation, quotas, prompt allowlist, error mapping | ✅ `npm test` |
-| **Real calls to the Claude API** (plan quality, latency, actual cost) | ❌ **not tested**: no API key was available on this machine |
+| **Real calls to Gemini or the Claude API** (plan quality, latency, cost) | ❌ **not tested**: no API key was available on this machine |
 | **Worker deployed on Cloudflare** | ❌ not deployed |
 | **The app running on a phone or emulator** (all screens, widget, voice input, own-key requests inside the R8-minified release build) | ❌ **not tested**: no device connected, and too little disk for an emulator |
 

@@ -20,7 +20,9 @@ import app.levelup2027.data.Completion
 import app.levelup2027.data.Goal
 import app.levelup2027.data.MemorySettings
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,7 +46,7 @@ class AiServiceTest {
     }
 
     private fun service(ai: AiSettings, client: Scripted = Scripted(), serverUrl: String = "") =
-        AiService(MemorySettings(AppSettings(ai = ai)), secrets, usage, serverUrl, NoNetwork(), clock = { System.currentTimeMillis() }) { client }
+        AiService(MemorySettings(AppSettings(ai = ai)), secrets, usage, serverUrl, emptyList(), NoNetwork(), clock = { System.currentTimeMillis() }) { client }
 
     @Test fun `availability reflects mode, key, server and consent`() = runTest {
         assertEquals(AiAvailability.NOT_CONFIGURED, service(AiSettings(mode = AiMode.SERVER)).availability())
@@ -101,5 +103,65 @@ class AiServiceTest {
         val o = app.levelup2027.ai.AiJson.parseToJsonElement(json).jsonObject
         assertEquals(7, (o.getValue("next_seven_days") as kotlinx.serialization.json.JsonArray).size)
         assertTrue(json.length < 6000)
+    }
+}
+
+class AiServiceGeminiTest {
+    private val usage = FakeAiUsageDao()
+    private val secrets = MemorySecretStore()
+
+    private class Capture : HttpTransport {
+        val bodies = mutableListOf<String>()
+        val keys = mutableListOf<String>()
+        override suspend fun post(url: String, body: String, bearer: String?) = HttpResult(0, "{}")
+        override suspend fun delete(url: String, bearer: String?) = HttpResult(0, "{}")
+        override suspend fun postWithHeaders(url: String, body: String, headers: Map<String, String>): HttpResult {
+            bodies += body; keys += headers.getValue("x-goog-api-key")
+            return HttpResult(200, """{"candidates":[{"content":{"parts":[{"text":"{\"reply\":\"ok\"}"}]},"finishReason":"STOP"}]}""")
+        }
+    }
+
+    private fun service(http: Capture, ai: AiSettings = AiSettings(mode = AiMode.GEMINI, consentGiven = true), builtIn: List<String> = listOf("shared-1", "shared-2")) =
+        AiService(MemorySettings(AppSettings(ai = ai)), secrets, usage, "", builtIn, http)
+
+    @Test fun `built-in keys work out of the box, user keys replace them`() = runTest {
+        val http = Capture()
+        val s = service(http)
+        assertEquals(AiAvailability.READY, s.availability())
+        assertTrue(s.usingBuiltInGeminiKeys())
+        s.adjust("{}"); s.adjust("{}")
+        assertEquals(listOf("shared-1", "shared-2"), http.keys)
+        assertEquals("gemini-shared", usage.rows.last().route)
+        s.setUserGeminiKeys(listOf("mine-1", " mine-1 ", "mine-2"))
+        assertEquals(listOf("mine-1", "mine-2"), s.userGeminiKeys())
+        s.adjust("{}")
+        assertEquals("mine-1", http.keys.last())
+        assertEquals("gemini", usage.rows.last().route)
+    }
+
+    @Test fun `no keys at all means not configured`() = runTest {
+        assertEquals(AiAvailability.NOT_CONFIGURED, service(Capture(), builtIn = emptyList()).availability())
+    }
+
+    @Test fun `shared keys are capped per phone per month, own keys are not`() = runTest {
+        val http = Capture()
+        val s = service(http)
+        repeat(AiService.SHARED_MONTHLY_LIMIT) { s.adjust("{}") }
+        assertTrue(runCatching { s.adjust("{}") }.exceptionOrNull() is AiError.QuotaExceeded)
+        s.setUserGeminiKeys(listOf("mine"))
+        s.adjust("{}")
+        assertEquals("mine", http.keys.last())
+    }
+
+    @Test fun `standing instructions are added to the request payload, not the system prompt`() = runTest {
+        val http = Capture()
+        val s = service(http, AiSettings(mode = AiMode.GEMINI, consentGiven = true, instructions = "No tasks before 7am."))
+        s.adjust("""{"today":"2026-11-04"}""")
+        val body = kotlinx.serialization.json.Json.parseToJsonElement(http.bodies.single()).jsonObject
+        val userText = body.getValue("contents").jsonArray.last().jsonObject.getValue("parts").jsonArray[0].jsonObject.getValue("text").jsonPrimitive.content
+        val payload = kotlinx.serialization.json.Json.parseToJsonElement(userText).jsonObject
+        assertEquals("No tasks before 7am.", payload.getValue("user_instructions").jsonPrimitive.content)
+        assertEquals("2026-11-04", payload.getValue("today").jsonPrimitive.content)
+        assertFalse(http.bodies.single().substringBefore("contents").contains("No tasks before 7am"))
     }
 }

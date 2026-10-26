@@ -75,6 +75,7 @@ object ModelPrices {
     private val perMillion = mapOf(
         "claude-haiku-5-5" to (0.10 to 0.50),
         "claude-sonnet-5-5" to (2.00 to 10.00),
+        "gemini" to (0.0 to 0.0), // free tier
     )
 
     fun estimateUsd(model: String, input: Long, output: Long): Double {
@@ -95,13 +96,37 @@ class AiService(
     private val secrets: SecretStore,
     private val usage: AiUsageDao,
     private val builtInServerUrl: String,
-    private val http: HttpTransport = UrlConnectionTransport(),
+    /** Gemini keys built into this APK (local.properties → geminiApiKeys); used when the user has none. */
+    private val builtInGeminiKeys: List<String> = emptyList(),
+    // 90 s per attempt: plans took 13–35 s in testing; a model that's slower is likely stuck, so move on.
+    private val http: HttpTransport = UrlConnectionTransport(timeoutMs = 90_000),
     private val clock: () -> Long = System::currentTimeMillis,
     private val directClientFactory: (String) -> AiClient = { key -> AnthropicDirectClient(key) },
 ) {
     companion object {
         const val KEY_API = "anthropic_api_key"
         const val KEY_DEVICE_TOKEN = "server_device_token"
+        const val KEY_GEMINI = "gemini_api_keys"
+        /** Requests per phone per month on the keys built into the app. */
+        const val SHARED_MONTHLY_LIMIT = 60
+    }
+
+    // One ring per key list so the round-robin position and resting keys persist between requests.
+    private var ring: KeyRing? = null
+
+    fun userGeminiKeys(): List<String> = secrets.get(KEY_GEMINI)?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+    fun setUserGeminiKeys(keys: List<String>) {
+        secrets.put(KEY_GEMINI, keys.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString("\n").ifBlank { null })
+        ring = null
+    }
+    val builtInGeminiKeyCount: Int get() = builtInGeminiKeys.count { it.isNotBlank() }
+    /** True when requests use the keys built into the app rather than the user's own. */
+    fun usingBuiltInGeminiKeys() = userGeminiKeys().isEmpty() && builtInGeminiKeyCount > 0
+
+    private fun geminiRing(): KeyRing {
+        val keys = userGeminiKeys().ifEmpty { builtInGeminiKeys }
+        ring?.takeIf { it.keys == keys.map(String::trim).filter(String::isNotEmpty).distinct() }?.let { return it }
+        return KeyRing(keys).also { ring = it }
     }
 
     fun hasApiKey() = !secrets.get(KEY_API).isNullOrBlank()
@@ -113,6 +138,7 @@ class AiService(
         val s = settings.current().ai
         return when {
             s.mode == AiMode.OFF -> AiAvailability.OFF
+            s.mode == AiMode.GEMINI && userGeminiKeys().isEmpty() && builtInGeminiKeyCount == 0 -> AiAvailability.NOT_CONFIGURED
             s.mode == AiMode.OWN_KEY && !hasApiKey() -> AiAvailability.NOT_CONFIGURED
             s.mode == AiMode.SERVER && serverUrl().isBlank() -> AiAvailability.NOT_CONFIGURED
             !s.consentGiven -> AiAvailability.NEEDS_CONSENT
@@ -150,6 +176,18 @@ class AiService(
         val s = settings.current().ai
         return when (s.mode) {
             AiMode.OFF -> throw AiError.NotConfigured("AI features are turned off in Settings.")
+            AiMode.GEMINI -> {
+                val r = geminiRing()
+                if (r.isEmpty) throw AiError.NotConfigured("Add a Gemini API key in Settings → AI.")
+                // The app's shared keys get a per-phone monthly cap so one phone can't use up everyone's quota.
+                if (usingBuiltInGeminiKeys()) {
+                    val used = usageThisMonth().count { it.route == "gemini-shared" && it.success }
+                    if (used >= SHARED_MONTHLY_LIMIT) {
+                        throw AiError.QuotaExceeded("You've used this month's $SHARED_MONTHLY_LIMIT AI requests on the app's shared keys. Add your own free Gemini key in Settings → AI to keep going.")
+                    }
+                }
+                GeminiClient(r, s.geminiModel, http, route = if (usingBuiltInGeminiKeys()) "gemini-shared" else "gemini")
+            }
             AiMode.OWN_KEY -> {
                 val key = secrets.get(KEY_API) ?: throw AiError.NotConfigured("Add your Anthropic API key in Settings → AI.")
                 val used = usageThisMonth().count { it.route == "own_key" }
@@ -166,8 +204,19 @@ class AiService(
         }
     }
 
-    private suspend fun <T> run(op: AiOperation, system: String, messages: List<ChatTurn>, schema: kotlinx.serialization.json.JsonObject, serializer: KSerializer<T>): T {
-        if (!settings.current().ai.consentGiven) throw AiError.NoConsent()
+    /** Adds the user's standing instructions to the request payload (never to the system prompt). */
+    private fun withInstructions(messages: List<ChatTurn>, instructions: String): List<ChatTurn> {
+        if (instructions.isBlank()) return messages
+        val last = messages.last()
+        val obj = runCatching { AiJson.parseToJsonElement(last.text) as kotlinx.serialization.json.JsonObject }.getOrNull() ?: return messages
+        val updated = kotlinx.serialization.json.JsonObject(obj + ("user_instructions" to kotlinx.serialization.json.JsonPrimitive(instructions.trim().take(2000))))
+        return messages.dropLast(1) + last.copy(text = AiJson.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), updated))
+    }
+
+    private suspend fun <T> run(op: AiOperation, system: String, rawMessages: List<ChatTurn>, schema: kotlinx.serialization.json.JsonObject, serializer: KSerializer<T>): T {
+        val ai = settings.current().ai
+        if (!ai.consentGiven) throw AiError.NoConsent()
+        val messages = withInstructions(rawMessages, ai.instructions)
         val c = client()
         val res = try {
             c.call(AiRequest(op, system, messages, schema))

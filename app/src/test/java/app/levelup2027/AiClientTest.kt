@@ -24,9 +24,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
-import java.net.InetAddress
-import java.net.ServerSocket
-import kotlin.concurrent.thread
 
 /**
  * The own-key client runs the real Anthropic Java SDK against a local HTTP server, so these tests
@@ -34,52 +31,13 @@ import kotlin.concurrent.thread
  * the real API (that needs a key; see the README's "Testing AI with a real key").
  */
 class AiClientTest {
-    private var server: ServerSocket? = null
+    private var server: MockHttp? = null
     private val requests = mutableListOf<Pair<Map<String, List<String>>, String>>()
 
-    /** A minimal HTTP/1.1 server: answers every request with [status] and [body]. */
     private fun serve(status: Int, body: String): String {
-        val s = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
-        server = s
-        thread(isDaemon = true) {
-            while (!s.isClosed) {
-                val sock = runCatching { s.accept() }.getOrNull() ?: break
-                sock.use { c ->
-                    val input = c.getInputStream().buffered()
-                    val headers = LinkedHashMap<String, MutableList<String>>()
-                    val line = StringBuilder()
-                    fun readLine(): String {
-                        line.setLength(0)
-                        while (true) {
-                            val b = input.read()
-                            if (b == -1 || b == '\n'.code) break
-                            if (b != '\r'.code) line.append(b.toChar())
-                        }
-                        return line.toString()
-                    }
-                    readLine() // request line
-                    while (true) {
-                        val h = readLine()
-                        if (h.isEmpty()) break
-                        val (k, v) = h.split(":", limit = 2).let { it[0].trim().lowercase() to it.getOrElse(1) { "" }.trim() }
-                        headers.getOrPut(k) { mutableListOf() } += v
-                    }
-                    val len = headers["content-length"]?.firstOrNull()?.toInt() ?: 0
-                    val bytes = ByteArray(len)
-                    var read = 0
-                    while (read < len) { val n = input.read(bytes, read, len - read); if (n < 0) break; read += n }
-                    synchronized(requests) { requests += headers to bytes.decodeToString() }
-                    val out = body.toByteArray()
-                    val reason = if (status in 200..299) "OK" else "Error"
-                    c.getOutputStream().apply {
-                        write("HTTP/1.1 $status $reason\r\nContent-Type: application/json\r\nContent-Length: ${out.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                        write(out)
-                        flush()
-                    }
-                }
-            }
-        }
-        return "http://127.0.0.1:${s.localPort}"
+        val m = MockHttp { r -> synchronized(requests) { requests += r.headers to r.body }; status to body }
+        server = m
+        return m.url
     }
 
     @After fun stop() { server?.close() }

@@ -27,12 +27,16 @@ android {
         applicationId = "app.levelup2027"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "2.1.0"
         // The Ascend AI server (worker/). Set ascendAiServerUrl in local.properties or gradle.properties;
         // empty means server mode is unavailable and users can bring their own API key instead.
         val aiServer = (localProps.getProperty("ascendAiServerUrl") ?: (project.findProperty("ascendAiServerUrl") as String?) ?: "")
         buildConfigField("String", "AI_SERVER_URL", "\"$aiServer\"")
+        // Free-tier Gemini keys shared by everyone using this APK, comma-separated (local.properties →
+        // geminiApiKeys). Anyone with the APK can extract them: use keys from projects WITHOUT billing.
+        val geminiKeys = (localProps.getProperty("geminiApiKeys") ?: "").replace("\"", "").trim()
+        buildConfigField("String", "GEMINI_KEYS", "\"$geminiKeys\"")
     }
 
     signingConfigs {

@@ -40,14 +40,15 @@ data class Capacity(val weekdayMinutes: Int? = null, val weekendMinutes: Int? = 
 }
 
 enum class AiMode(val label: String) {
-    SERVER("Ascend AI server"),
-    OWN_KEY("My own Anthropic API key"),
+    GEMINI("Google Gemini"),
+    SERVER("Ascend AI server (Claude)"),
+    OWN_KEY("Anthropic Claude (own key)"),
     OFF("Off"),
 }
 
 @Serializable
 data class AiSettings(
-    val mode: AiMode = AiMode.SERVER,
+    val mode: AiMode = AiMode.GEMINI,
     /** Overrides the server URL built into the app (BuildConfig.AI_SERVER_URL). */
     val serverUrl: String = "",
     /** The user has read what is sent to the AI provider and agreed. Asked once, before the first AI call. */
@@ -56,6 +57,10 @@ data class AiSettings(
     val autoApplySimple: Boolean = false,
     /** Local cap for own-key mode so a bug or loop can't run up the user's bill. */
     val monthlyRequestLimit: Int = 60,
+    /** Gemini model override; blank uses the defaults (a fast free-tier model, lighter one for intake). */
+    val geminiModel: String = "",
+    /** Standing instructions added to every AI request, e.g. "no tasks before 7am, metric units". */
+    val instructions: String = "",
 )
 
 @Serializable
@@ -84,6 +89,8 @@ data class AppSettings(
     /** Structured context from the last "Build my plan" conversation (work hours, preferences...). */
     val userContextJson: String = "",
     val widgetHintDismissed: Boolean = false,
+    /** Customised "Build my plan" starter prompts; null means the built-in ones. */
+    val promptTemplates: List<app.levelup2027.ai.PromptTemplate>? = null,
 ) {
     fun isLowEnergy(today: LocalDate) = lowEnergyDate == today
 
@@ -93,6 +100,12 @@ data class AppSettings(
      */
     fun migrated(): AppSettings {
         if (settingsVersion >= CURRENT_VERSION) return this
+        if (settingsVersion >= 2) {
+            return copy(
+                settingsVersion = CURRENT_VERSION,
+                ai = if (ai.mode == AiMode.SERVER && ai.serverUrl.isBlank()) ai.copy(mode = AiMode.GEMINI, consentGiven = false) else ai,
+            )
+        }
         val widgetCats = widget.categories.map(Cat::fromLegacy).toSet()
         val allLegacy = Cat.LEGACY.values.toSet()
         return copy(
@@ -100,13 +113,15 @@ data class AppSettings(
             widget = widget.copy(categories = if (widgetCats.containsAll(allLegacy)) emptySet() else widgetCats),
             onboardingDone = onboardingDone || seedVersion > 0,
             planStartDate = planStartDate ?: if (seedVersion > 0) Campaign.START else null,
+            // 2.0 defaulted to the Claude server; without a server address, Gemini is the working choice.
+            ai = if (ai.mode == AiMode.SERVER && ai.serverUrl.isBlank()) ai.copy(mode = AiMode.GEMINI, consentGiven = false) else ai,
         )
     }
 
     val legacyDisabledCategoryIds: Set<String>
         get() = legacyEnabledCategories?.let { enabled -> (Cat.LEGACY.keys - enabled).map(Cat::fromLegacy).toSet() } ?: emptySet()
 
-    companion object { const val CURRENT_VERSION = 2 }
+    companion object { const val CURRENT_VERSION = 3 }
 }
 
 interface SettingsSource {
