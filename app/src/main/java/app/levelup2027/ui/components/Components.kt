@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.EventRepeat
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -50,6 +52,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.levelup2027.data.CardLayout
 import app.levelup2027.data.CategoryEntity
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.DefaultMode
@@ -118,7 +121,9 @@ fun firstBullet(s: String): String =
     s.lineSequence().map { it.trim().removePrefix("•").trim() }.firstOrNull { it.isNotEmpty() } ?: ""
 
 /**
- * Compact task card. Shows what to do without opening it; completes in one tap.
+ * Task card. Compact by default: icon, title, one line of details, a one-tap "done" and an
+ * expand arrow. Expanded, it shows the ideal and minimum versions and all actions. What appears
+ * is set by [layout] (Today → Customise).
  * [mode] decides which version is emphasised; low-energy forces MINIMUM without changing the task.
  */
 @Composable
@@ -131,54 +136,85 @@ fun TaskCard(
     onSkip: () -> Unit,
     onUndo: () -> Unit,
     onReschedule: (() -> Unit)? = null,
+    layout: CardLayout = CardLayout(expandedByDefault = true),
+    expanded: Boolean = true,
+    onToggleExpand: (() -> Unit)? = null,
 ) {
     val t = occ.task
     val c = occ.completion
     val catalog = LocalCatalog.current
+    val quickType = if (mode == DefaultMode.MINIMUM) CompletionType.MINIMUM else CompletionType.IDEAL
     Card(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
     ) {
-        Column(Modifier.clickable(onClickLabel = "Open details", onClick = onOpen).padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = if (c == null) 6.dp else 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CategoryIcon(t.category, 30)
-                Spacer(Modifier.width(10.dp))
+        Column(Modifier.clickable(onClickLabel = "Open details", onClick = onOpen).padding(start = 12.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 44.dp)) {
+                if (layout.showIcon) { CategoryIcon(t.category, 28); Spacer(Modifier.width(10.dp)) }
                 Column(Modifier.weight(1f)) {
                     Text(
                         t.title,
                         style = MaterialTheme.typography.titleSmall,
                         color = if (c == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = if (expanded) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        buildString {
-                            append(catalog.category(t.category).shortName)
-                            if (t.goalId != null) { append(" · "); append(catalog.goalName(t.goalId)) }
-                            if (t.exactTime != null) { append(" · "); append(t.exactTime) }
-                            if (showDate) { append(" · "); append(app.levelup2027.domain.DateFmt.short(occ.date)) }
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
+                    if (layout.showDetails) {
+                        Text(
+                            buildList {
+                                add(catalog.category(t.category).shortName)
+                                if (t.goalId != null) add(catalog.goalName(t.goalId))
+                                if (layout.showMinutes && c == null) add("${if (quickType == CompletionType.MINIMUM) t.estimatedMinimumMinutes else t.estimatedIdealMinutes} min")
+                                t.exactTime?.let { add(it) }
+                                if (showDate) add(app.levelup2027.domain.DateFmt.short(occ.date))
+                            }.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
                 }
                 if (c != null) {
                     CompletionBadge(c.completionType, c.skipReason)
                     IconButton(onClick = onUndo, modifier = Modifier.semantics { contentDescription = "Undo ${t.title}" }) {
                         Icon(Icons.Outlined.Undo, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                } else {
+                    if (!expanded && layout.showQuickDone) {
+                        IconButton(
+                            onClick = { onComplete(quickType) },
+                            modifier = Modifier.semantics { contentDescription = "Mark ${t.title} done (${if (quickType == CompletionType.MINIMUM) "minimum" else "ideal"})" },
+                        ) {
+                            Box(
+                                Modifier.size(28.dp).clip(CircleShape).border(2.dp,
+                                    if (quickType == CompletionType.MINIMUM) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {}
+                        }
+                    }
+                    if (onToggleExpand != null) {
+                        IconButton(onClick = onToggleExpand) {
+                            Icon(
+                                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                contentDescription = if (expanded) "Show less" else "Show more",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
-            if (c == null) {
-                Spacer(Modifier.size(6.dp))
-                Column(Modifier.padding(start = 40.dp, end = 8.dp)) {
-                    if (mode != DefaultMode.MINIMUM) VersionLine("Ideal", firstBullet(t.idealDescription), t.estimatedIdealMinutes, MaterialTheme.colorScheme.primary)
-                    if (mode != DefaultMode.IDEAL) VersionLine("Min", firstBullet(t.minimumDescription), t.estimatedMinimumMinutes, MaterialTheme.colorScheme.secondary)
+            if (c == null && expanded) {
+                val showIdeal = layout.showIdeal && mode != DefaultMode.MINIMUM
+                val showMin = layout.showMinimum && mode != DefaultMode.IDEAL
+                if (showIdeal || showMin) {
+                    Column(Modifier.padding(start = if (layout.showIcon) 38.dp else 0.dp, end = 8.dp, top = 2.dp)) {
+                        if (showIdeal) VersionLine("Ideal", firstBullet(t.idealDescription), if (layout.showMinutes) t.estimatedIdealMinutes else 0, MaterialTheme.colorScheme.primary)
+                        if (showMin) VersionLine("Min", firstBullet(t.minimumDescription), if (layout.showMinutes) t.estimatedMinimumMinutes else 0, MaterialTheme.colorScheme.secondary)
+                    }
                 }
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 36.dp, top = 4.dp),
+                    Modifier.fillMaxWidth().padding(start = if (layout.showIcon) 34.dp else 0.dp, top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -212,17 +248,56 @@ fun TaskCard(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    if (onReschedule != null) {
+                    if (onReschedule != null && layout.showMove) {
                         IconButton(onClick = onReschedule, modifier = Modifier.semantics { contentDescription = "Move ${t.title} to another day" }) {
                             Icon(Icons.Outlined.EventRepeat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    TextButton(onClick = onSkip, modifier = Modifier.heightIn(min = 40.dp)) {
-                        Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (layout.showSkip) {
+                        TextButton(onClick = onSkip, modifier = Modifier.heightIn(min = 40.dp)) {
+                            Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** A card whose body folds away; when folded it shows [summary] on the header line. */
+@Composable
+fun CollapsibleCard(
+    title: String,
+    summary: String,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    titleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    content: @Composable () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", onClick = onToggle)
+                .padding(start = 14.dp, end = 4.dp).heightIn(min = 44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Overline(title, color = titleColor)
+            if (collapsed && summary.isNotBlank()) {
+                Spacer(Modifier.width(8.dp))
+                Text(summary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            } else Spacer(Modifier.weight(1f))
+            Icon(
+                if (collapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                contentDescription = if (collapsed) "Expand $title" else "Collapse $title",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+        if (!collapsed) Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) { content() }
     }
 }
 

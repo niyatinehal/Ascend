@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +39,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +76,7 @@ import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.Pill
 import app.levelup2027.ui.components.ProgressLine
 import app.levelup2027.ui.components.SkipDialog
+import app.levelup2027.ui.components.CollapsibleCard
 import app.levelup2027.ui.components.RescheduleDialog
 import app.levelup2027.ui.components.TaskCard
 import app.levelup2027.ui.theme.icon
@@ -91,11 +98,25 @@ fun TodayScreen(vm: AppViewModel) {
     var skipping by remember { mutableStateOf<Occurrence?>(null) }
     var moving by remember { mutableStateOf<Occurrence?>(null) }
     var showIfTime by remember { mutableStateOf(false) }
+    var customising by remember { mutableStateOf(false) }
+    // Cards whose expanded state differs from the default (so "default expanded" can flip them all).
+    var toggledCards by rememberSaveable { mutableStateOf(setOf<String>()) }
     val nav = LocalNav.current
     val milestones by vm.milestones.collectAsState()
     val goalsNow by vm.goals.collectAsState()
     val allTasksState by vm.tasks.collectAsState()
     val allTasks = allTasksState.orEmpty()
+    val layout = s.todayLayout
+    val cardLayout = s.cardLayout
+
+    fun isCollapsed(id: String) = id in layout.collapsed
+    fun toggleSection(id: String) = vm.updateSettings(app.levelup2027.data.Repository.ChangeKind.OTHER) {
+        val c = it.todayLayout.collapsed
+        it.copy(todayLayout = it.todayLayout.copy(collapsed = if (id in c) c - id else c + id))
+    }
+    fun cardKey(o: Occurrence) = "${o.task.id}@${o.date}"
+    fun isExpanded(o: Occurrence) = cardLayout.expandedByDefault != (cardKey(o) in toggledCards)
+    fun toggleCard(o: Occurrence) { val k = cardKey(o); toggledCards = if (k in toggledCards) toggledCards - k else toggledCards + k }
 
     val mode = if (d.lowEnergy) DefaultMode.MINIMUM else s.defaultMode
     fun modeFor(o: Occurrence) = if (o.task.id in d.preferMinimum) DefaultMode.MINIMUM else mode
@@ -106,39 +127,63 @@ fun TodayScreen(vm: AppViewModel) {
         else -> d.occurrences.filter { it.task.timeSlot == filter.slot }
     }
 
+    @Composable
+    fun TaskItem(occ: Occurrence, showDate: Boolean = false) {
+        TaskCard(
+            occ = occ,
+            mode = modeFor(occ),
+            showDate = showDate,
+            onOpen = { nav.openTask(occ.task.id, occ.date) },
+            onComplete = { type -> vm.complete(occ.task, occ.date, type) },
+            onSkip = { skipping = occ },
+            onUndo = { vm.undo(occ.task.id, occ.date) },
+            onReschedule = { moving = occ },
+            layout = cardLayout,
+            expanded = isExpanded(occ),
+            onToggleExpand = { toggleCard(occ) },
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item { Header(d, s, milestones) }
-        item { ProgressCard(d, onLowEnergy = { vm.setLowEnergy(!d.lowEnergy) }) }
-        if (filter == TodayFilter.TODAY && d.focus.mostImportant != null) {
-            item { FocusCard(d, onOpen = { nav.openTask(it.occ.task.id, it.occ.date) }) }
+        item { Header(d, s, milestones, onAdjust = nav.openAdjust, onCustomise = { customising = true }) }
+        if (layout.showProgress) {
+            item(key = "progress") {
+                val p = d.progress
+                CollapsibleCard(
+                    "Today's progress", "${p.done}/${p.scheduled} done · ${p.ideal} ideal · ${p.minimum} min" + if (d.lowEnergy) " · low-energy day" else "",
+                    isCollapsed("progress"), { toggleSection("progress") },
+                ) { ProgressBody(d, onLowEnergy = { vm.setLowEnergy(!d.lowEnergy) }) }
+            }
         }
-        if (filter == TodayFilter.TODAY && d.missed.isNotEmpty()) {
-            item { MissedCard(vm, d, onMove = { moving = it }) }
+        if (layout.showFocus && filter == TodayFilter.TODAY && d.focus.mostImportant != null) {
+            item(key = "focus") {
+                CollapsibleCard(
+                    "Focus", d.focus.mostImportant.occ.task.title, isCollapsed("focus"), { toggleSection("focus") },
+                    titleColor = MaterialTheme.colorScheme.primary,
+                ) { FocusBody(d, onOpen = { nav.openTask(it.occ.task.id, it.occ.date) }) }
+            }
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = nav.openAdjust, modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
-                    Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Adjust my plan")
-                }
+        if (layout.showMissed && filter == TodayFilter.TODAY && d.missed.isNotEmpty()) {
+            item(key = "missed") {
+                CollapsibleCard(
+                    "From earlier days (${d.missed.size})", "Nothing moved automatically", isCollapsed("missed"), { toggleSection("missed") },
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) { MissedBody(vm, d, onMove = { moving = it }) }
             }
         }
         val nextWeek = Dates.weekStart(d.date).plusWeeks(1)
-        val wantsWeekPlan = Dates.daysUntil(d.date, nextWeek) <= 3 &&
+        val wantsWeekPlan = layout.showWeekPlanner && Dates.daysUntil(d.date, nextWeek) <= 3 &&
             goalsNow.any { it.isActive && it.source == app.levelup2027.data.Source.AI } &&
             allTasks.none { it.enabled && it.scheduledDate?.let { sd -> !sd.isBefore(nextWeek) && sd.isBefore(nextWeek.plusDays(7)) } == true && it.source == app.levelup2027.data.Source.AI }
         if (filter == TodayFilter.TODAY && wantsWeekPlan) {
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
-                    Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Next week isn't planned yet", style = MaterialTheme.typography.titleSmall)
-                            Text("Your habits continue on their own. AI can add specific tasks for the week of ${DateFmt.short(nextWeek)} based on how this week went.",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                    Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Next week isn't planned yet", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         TextButton(onClick = { nav.planNextWeek(nextWeek) }) { Text("Plan it") }
                     }
                 }
@@ -150,8 +195,18 @@ fun TodayScreen(vm: AppViewModel) {
         if (s.notificationPromptEligible && !s.notificationPromptDismissed) {
             item { NotificationPrompt(vm, s) }
         }
-        item { FilterRow(d, filter, onSelect = { vm.todayFilter.value = it }) }
-        item { CountLine(filter, list) }
+        if (layout.showFilters) item { FilterRow(d, filter, onSelect = { vm.todayFilter.value = it }) }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { CountLine(filter, list) }
+                val anyExpanded = list.any { isExpanded(it) }
+                TextButton(onClick = {
+                    // Flip every visible card to the same state.
+                    toggledCards = if (anyExpanded) list.filter { cardLayout.expandedByDefault }.map(::cardKey).toSet()
+                    else list.filter { !cardLayout.expandedByDefault }.map(::cardKey).toSet()
+                }) { Text(if (anyExpanded) "Collapse all" else "Expand all") }
+            }
+        }
 
         if (list.isEmpty()) {
             item { EmptyState(filter, d) }
@@ -162,8 +217,9 @@ fun TodayScreen(vm: AppViewModel) {
             TimeSlot.entries.forEach { slot ->
                 val group = main.filter { it.task.timeSlot == slot }
                 if (group.isNotEmpty()) {
-                    item(key = "h-$slot") { SlotHeader(slot, group) }
-                    items(group, key = { "${it.task.id}@${it.date}" }) { occ -> Card(occ, modeFor(occ), false, vm, { moving = it }) { skipping = it } }
+                    val id = "slot:${slot.name}"
+                    item(key = "h-$slot") { SlotHeader(slot, group, collapsed = isCollapsed(id), onToggle = { toggleSection(id) }) }
+                    if (!isCollapsed(id)) items(group, key = ::cardKey) { occ -> TaskItem(occ) }
                 }
             }
             if (extra.isNotEmpty()) {
@@ -173,17 +229,17 @@ fun TodayScreen(vm: AppViewModel) {
                             Overline("If you have time (${extra.size})", Modifier.weight(1f))
                             TextButton(onClick = { showIfTime = !showIfTime }) { Text(if (showIfTime) "Hide" else "Show") }
                         }
-                        d.focus.tradeOff?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (showIfTime) d.focus.tradeOff?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
-                if (showIfTime) items(extra, key = { "x-${it.task.id}@${it.date}" }) { occ -> Card(occ, modeFor(occ), false, vm, { moving = it }) { skipping = it } }
+                if (showIfTime) items(extra, key = { "x-" + cardKey(it) }) { occ -> TaskItem(occ) }
             }
         } else {
-            items(list, key = { "${it.task.id}@${it.date}" }) { occ ->
-                Card(occ, modeFor(occ), showDate = filter == TodayFilter.OVERDUE, vm, { moving = it }) { skipping = it }
-            }
+            items(list, key = ::cardKey) { occ -> TaskItem(occ, showDate = filter == TodayFilter.OVERDUE) }
         }
     }
+
+    if (customising) CustomiseTodaySheet(vm, s, onDismiss = { customising = false; toggledCards = emptySet() })
 
     moving?.let { occ ->
         RescheduleDialog(occ.task.title, occ.date, d.date, onDismiss = { moving = null }) { to ->
@@ -207,28 +263,13 @@ fun TodayScreen(vm: AppViewModel) {
     }
 }
 
-@Composable
-private fun Card(occ: Occurrence, mode: DefaultMode, showDate: Boolean, vm: AppViewModel, onMove: (Occurrence) -> Unit, onSkip: (Occurrence) -> Unit) {
-    val nav = LocalNav.current
-    TaskCard(
-        occ = occ,
-        mode = mode,
-        showDate = showDate,
-        onOpen = { nav.openTask(occ.task.id, occ.date) },
-        onComplete = { type -> vm.complete(occ.task, occ.date, type) },
-        onSkip = { onSkip(occ) },
-        onUndo = { vm.undo(occ.task.id, occ.date) },
-        onReschedule = { onMove(occ) },
-    )
-}
-
 /** Answers: what matters most today, what to do next, and the minimum useful action. */
 @Composable
-private fun FocusCard(d: DayState, onOpen: (FocusItem) -> Unit) {
+private fun FocusBody(d: DayState, onOpen: (FocusItem) -> Unit) {
     val top = d.focus.mostImportant ?: return
     val next = d.focus.next
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    run {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FocusLine("Matters most today", top, onOpen)
             if (next != null && next.taskId != top.taskId) FocusLine("Next up", next, onOpen)
             val anchor = next ?: top
@@ -264,18 +305,13 @@ private fun FocusLine(label: String, item: FocusItem, onOpen: (FocusItem) -> Uni
 
 /** Missed one-time tasks: a suggestion each, confirmed by the user. Nothing rolls forward on its own. */
 @Composable
-private fun MissedCard(vm: AppViewModel, d: DayState, onMove: (Occurrence) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
+private fun MissedBody(vm: AppViewModel, d: DayState, onMove: (Occurrence) -> Unit) {
     val nav = LocalNav.current
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${d.missed.size} task${if (d.missed.size == 1) "" else "s"} from earlier days", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide" else "Review") }
-            }
+    run {
+        Column {
             Text("Nothing was moved automatically. Here's a suggestion for each; your history is kept either way.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (expanded) {
+            run {
                 d.missed.forEach { m ->
                     Spacer(Modifier.height(10.dp))
                     Text(m.occ.task.title + " · " + DateFmt.short(m.occ.date), style = MaterialTheme.typography.bodyMedium)
@@ -319,7 +355,7 @@ private fun WidgetHint(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027.data.Milestone>) {
+private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027.data.Milestone>, onAdjust: () -> Unit, onCustomise: () -> Unit) {
     val hour = LocalTime.now().hour
     val greeting = when (hour) {
         in 5..11 -> "Good morning"
@@ -336,8 +372,10 @@ private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027
         Column(horizontalAlignment = Alignment.End) {
             Pill("Lv $level · ${d.xp} XP", MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(4.dp))
-            ProgressLine(Xp.levelFraction(d.xp), Modifier.width(96.dp).height(3.dp))
+            ProgressLine(Xp.levelFraction(d.xp), Modifier.width(80.dp).height(3.dp))
         }
+        IconButton(onClick = onAdjust) { Icon(Icons.Outlined.AutoAwesome, "Adjust my plan", tint = MaterialTheme.colorScheme.primary) }
+        IconButton(onClick = onCustomise) { Icon(Icons.Outlined.Tune, "Customise Today") }
     }
     val start = s.planStartDate
     val nextMilestone = milestones.filter { !it.done && !it.dueDate.isBefore(d.date) }.minByOrNull { it.dueDate }
@@ -349,13 +387,10 @@ private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027
 }
 
 @Composable
-private fun ProgressCard(d: DayState, onLowEnergy: () -> Unit) {
+private fun ProgressBody(d: DayState, onLowEnergy: () -> Unit) {
     val p = d.progress
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Column(Modifier.padding(14.dp)) {
+    run {
+        Column {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     "${p.done}/${p.scheduled}",
@@ -470,13 +505,19 @@ private fun CountLine(filter: TodayFilter, list: List<Occurrence>) {
 }
 
 @Composable
-private fun SlotHeader(slot: TimeSlot, group: List<Occurrence>) {
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SlotHeader(slot: TimeSlot, group: List<Occurrence>, collapsed: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp).clickable(onClickLabel = if (collapsed) "Show ${slot.label}" else "Hide ${slot.label}", onClick = onToggle)
+            .heightIn(min = 40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Icon(slot.icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(6.dp))
         Overline(slot.label)
         Spacer(Modifier.weight(1f))
         Text("${group.count { it.isDone }}/${group.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(if (collapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, null, Modifier.padding(start = 4.dp).size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

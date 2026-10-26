@@ -1,6 +1,7 @@
 package app.levelup2027.ui.plan
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -405,24 +408,37 @@ private fun TimeCard(plan: ValidatedPlan, editing: Boolean, onEditCapacity: () -
 
 @Composable
 private fun DraftTaskRow(t: DraftTask, schedule: String, category: String, goal: String?, editing: Boolean, onEdit: () -> Unit, onRemove: () -> Unit) {
-    SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(t.title, style = MaterialTheme.typography.titleSmall)
-                Text(listOfNotNull(schedule, category, goal, "P${t.priority}").joinToString(" · "), style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.material3.Card(
+        onClick = { open = !open },
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+    ) {
+        Column(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(t.title, style = MaterialTheme.typography.titleSmall, maxLines = if (open) 3 else 1)
+                    Text(listOfNotNull(schedule, "${t.idealMinutes}/${t.minimumMinutes} min", goal ?: category).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                if (editing) {
+                    IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, "Edit ${t.title}") }
+                    IconButton(onClick = onRemove) { Icon(Icons.Outlined.DeleteOutline, "Remove ${t.title}") }
+                }
+                Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (open) "Show less" else "Show more",
+                    Modifier.padding(8.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (editing) {
-                IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, "Edit ${t.title}") }
-                IconButton(onClick = onRemove) { Icon(Icons.Outlined.DeleteOutline, "Remove ${t.title}") }
+            if (open) {
+                Text("IDEAL · ${t.idealMinutes} min", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text(t.ideal, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(4.dp))
+                Text(if (t.isRest) "MINIMUM · rest is fine" else "MINIMUM · ${t.minimumMinutes} min", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                Text(t.minimum, style = MaterialTheme.typography.bodySmall)
+                Text("$category · priority ${t.priority}" + if (t.dependsOn.isNotEmpty()) " · after: ${t.dependsOn.joinToString()}" else "",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text("IDEAL · ${t.idealMinutes} min", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-        Text(t.ideal, style = MaterialTheme.typography.bodySmall)
-        Text(if (t.isRest) "MINIMUM · rest is fine" else "MINIMUM · ${t.minimumMinutes} min", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-        Text(t.minimum, style = MaterialTheme.typography.bodySmall)
-        if (t.dependsOn.isNotEmpty()) Text("After: ${t.dependsOn.joinToString()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
