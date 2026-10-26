@@ -225,20 +225,25 @@ data class HttpResult(val status: Int, val body: String)
 interface HttpTransport {
     suspend fun post(url: String, body: String, bearer: String?): HttpResult
     suspend fun delete(url: String, bearer: String?): HttpResult
+    suspend fun postWithHeaders(url: String, body: String, headers: Map<String, String>): HttpResult =
+        throw UnsupportedOperationException("postWithHeaders")
 }
 
 class UrlConnectionTransport(private val timeoutMs: Int = 240_000) : HttpTransport {
-    override suspend fun post(url: String, body: String, bearer: String?) = request("POST", url, body, bearer)
-    override suspend fun delete(url: String, bearer: String?) = request("DELETE", url, null, bearer)
+    override suspend fun post(url: String, body: String, bearer: String?) = request("POST", url, body, bearerHeader(bearer))
+    override suspend fun delete(url: String, bearer: String?) = request("DELETE", url, null, bearerHeader(bearer))
+    override suspend fun postWithHeaders(url: String, body: String, headers: Map<String, String>) = request("POST", url, body, headers)
 
-    private suspend fun request(method: String, url: String, body: String?, bearer: String?): HttpResult = withContext(Dispatchers.IO) {
+    private fun bearerHeader(bearer: String?) = if (bearer != null) mapOf("Authorization" to "Bearer $bearer") else emptyMap()
+
+    private suspend fun request(method: String, url: String, body: String?, headers: Map<String, String>): HttpResult = withContext(Dispatchers.IO) {
         try {
             val c = URL(url).openConnection() as HttpURLConnection
             c.requestMethod = method
             c.connectTimeout = 15_000
             c.readTimeout = timeoutMs
             c.setRequestProperty("Content-Type", "application/json")
-            if (bearer != null) c.setRequestProperty("Authorization", "Bearer $bearer")
+            headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
             if (body != null) {
                 c.doOutput = true
                 c.outputStream.use { it.write(body.toByteArray()) }
@@ -246,6 +251,9 @@ class UrlConnectionTransport(private val timeoutMs: Int = 240_000) : HttpTranspo
             val status = c.responseCode
             val text = (if (status in 200..299) c.inputStream else c.errorStream)?.use { it.readBytes().decodeToString() } ?: ""
             HttpResult(status, text)
+        } catch (e: java.net.SocketTimeoutException) {
+            // Distinguish "too slow" (the provider may be overloaded) from "no connection".
+            HttpResult(504, "{}")
         } catch (e: IOException) {
             HttpResult(0, Json.encodeToString(JsonObject.serializer(), JsonObject(mapOf("message" to JsonPrimitive("Couldn't reach the AI server. Check your connection.")))))
         }

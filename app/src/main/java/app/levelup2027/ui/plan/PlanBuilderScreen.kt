@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -140,12 +142,13 @@ fun PlanBuilderScreen(
 @Composable
 private fun DescribeStep(vm: AppViewModel, builder: PlanBuilderViewModel, state: BuilderState, isOnboarding: Boolean, onClose: () -> Unit) {
     var manual by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("What do you want to work toward?", style = MaterialTheme.typography.titleLarge)
         Text(
             "Write it the way you'd say it: one goal or several, plus anything about your week. AI turns it into a plan you can review before anything is saved.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        AreaPicker(vm, state.text, builder::setText)
         OutlinedTextField(
             value = state.text,
             onValueChange = builder::setText,

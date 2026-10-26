@@ -55,7 +55,10 @@ class AppContainer(context: Context) {
     )
     val backup = BackupManager(db, settings)
     val secrets = KeystoreSecretStore(appContext)
-    val ai = AiService(settings, secrets, db.aiUsage(), BuildConfig.AI_SERVER_URL)
+    val ai = AiService(
+        settings, secrets, db.aiUsage(), BuildConfig.AI_SERVER_URL,
+        builtInGeminiKeys = BuildConfig.GEMINI_KEYS.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+    )
 }
 
 val Context.container: AppContainer get() = (applicationContext as LevelUpApp).container

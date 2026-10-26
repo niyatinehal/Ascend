@@ -118,6 +118,7 @@ fun SettingsScreen(vm: AppViewModel) {
     var newCategory by remember { mutableStateOf(false) }
     var editingCapacity by remember { mutableStateOf(false) }
     var confirmErase by remember { mutableStateOf(false) }
+    var editingPrompts by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
@@ -168,6 +169,15 @@ fun SettingsScreen(vm: AppViewModel) {
         item { Text("Settings", style = MaterialTheme.typography.headlineSmall) }
 
         item { SectionCard { AiSettingsSection(vm) } }
+
+        item {
+            SectionCard {
+                Overline("Plan prompts")
+                Text("The starter texts for each area in Build my plan. Edit them, add your own areas, or reset them.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SettingsButton("Edit plan prompts") { editingPrompts = true }
+            }
+        }
 
         item {
             SectionCard {
@@ -357,6 +367,7 @@ fun SettingsScreen(vm: AppViewModel) {
         )
     }
 
+    if (editingPrompts) app.levelup2027.ui.plan.PromptTemplatesEditor(vm, onDismiss = { editingPrompts = false })
     if (editingCapacity) {
         CapacityDialog(s.capacity.weekdayMinutes, s.capacity.weekendMinutes, onDismiss = { editingCapacity = false }) { a, b ->
             update { it.copy(capacity = app.levelup2027.data.Capacity(a, b)) }

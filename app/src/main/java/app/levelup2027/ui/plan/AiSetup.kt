@@ -69,10 +69,19 @@ fun AiConsentDialog(vm: AppViewModel, onDismiss: () -> Unit, onAccepted: () -> U
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "To build and adjust your plan, Ascend sends some of your information to Anthropic's Claude AI" +
-                        if (mode == AiMode.OWN_KEY) ", directly from this phone using your API key." else " through the Ascend AI server, which holds the API key and counts requests.",
+                    when (mode) {
+                        AiMode.GEMINI -> "To build and adjust your plan, Ascend sends some of your information to Google's Gemini AI, directly from this phone."
+                        AiMode.OWN_KEY -> "To build and adjust your plan, Ascend sends some of your information to Anthropic's Claude AI, directly from this phone using your API key."
+                        else -> "To build and adjust your plan, Ascend sends some of your information to Anthropic's Claude AI through the Ascend AI server, which holds the API key and counts requests."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (mode == AiMode.GEMINI) {
+                    Text(
+                        "Gemini's free tier: Google may use what you send to improve its products, and people may review it. Don't include anything you wouldn't want seen, such as health details or full names.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Overline("Sent when you use an AI feature")
                 Text("• What you type in Build my plan or Adjust my plan, and your answers\n• Your goal titles, deadlines and priorities\n• Task titles, times and durations for the next 7 days, and your habits\n• Counts of completed, minimum and skipped tasks for the last 7 days",
                     style = MaterialTheme.typography.bodySmall)
@@ -80,7 +89,7 @@ fun AiConsentDialog(vm: AppViewModel, onDismiss: () -> Unit, onAccepted: () -> U
                 Text("• Notes, progress entries, weekly reviews, backups\n• Your full completion history\n• Anything when you just tick tasks, use the widget or reminders: those work entirely on the phone",
                     style = MaterialTheme.typography.bodySmall)
                 Text(
-                    "Your plan itself is stored only on this phone. The AI server keeps request counts per device, not content. You can turn AI off or delete your data at any time in Settings.",
+                    "Your plan itself is stored only on this phone. Ascend keeps only request counts, not content. You can turn AI off or delete your data at any time in Settings.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -182,15 +191,22 @@ fun AiSettingsSection(vm: AppViewModel) {
             when (availability) {
                 AiAvailability.READY -> "Ready."
                 AiAvailability.NEEDS_CONSENT -> "Set up. You'll be asked to review what's shared before the first request."
-                AiAvailability.NOT_CONFIGURED -> if (s.ai.mode == AiMode.OWN_KEY) "Add your API key below." else "This build has no AI server address. Use your own API key, or enter a server address."
+                AiAvailability.NOT_CONFIGURED -> when (s.ai.mode) {
+                    AiMode.OWN_KEY, AiMode.GEMINI -> "Add your API key below."
+                    else -> "This build has no AI server address. Use Gemini or your own key, or enter a server address."
+                }
                 AiAvailability.OFF -> "Off. Everything else in the app works without AI."
                 null -> ""
             },
             style = MaterialTheme.typography.bodyMedium,
         )
-        ChipChoice(AiMode.entries, s.ai.mode, { it.label }) { m -> vm.updateSettings { it.copy(ai = it.ai.copy(mode = m)) } }
+        // Consent is per provider: switching asks again before the first request.
+        ChipChoice(AiMode.entries, s.ai.mode, { it.label }) { m ->
+            if (m != s.ai.mode) vm.updateSettings { it.copy(ai = it.ai.copy(mode = m, consentGiven = false)) }
+        }
 
         when (s.ai.mode) {
+            AiMode.GEMINI -> GeminiKeys(vm, app.levelup2027.ai.AiService.SHARED_MONTHLY_LIMIT, s.ai.geminiModel) { tick++ }
             AiMode.OWN_KEY -> {
                 Text(
                     "Requests go straight from this phone to Anthropic and are billed to your Anthropic account. Keys start with sk-ant-. The key is stored encrypted on this phone and isn't included in backups.",
@@ -244,6 +260,16 @@ fun AiSettingsSection(vm: AppViewModel) {
         }
 
         if (s.ai.mode != AiMode.OFF) {
+            var instructions by remember(s.ai.instructions) { mutableStateOf(s.ai.instructions) }
+            Overline("Your standing instructions")
+            Text("Added to every AI request, e.g. \"No tasks before 7am. Weekends are for family. Use metric units.\"",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(instructions, { instructions = it.take(2000) }, modifier = Modifier.fillMaxWidth(), minLines = 2,
+                placeholder = { Text("Optional") })
+            if (instructions != s.ai.instructions) {
+                OutlinedButton(onClick = { vm.updateSettings { it.copy(ai = it.ai.copy(instructions = instructions.trim())) } },
+                    modifier = Modifier.fillMaxWidth()) { Text("Save instructions") }
+            }
             SwitchRow(
                 "Apply small changes without asking",
                 "When you ask for a lighter day or to move one task, apply it straight away. Goals, deadlines and habits always need your OK.",
@@ -256,7 +282,11 @@ fun AiSettingsSection(vm: AppViewModel) {
             val cost = ok.sumOf { ModelPrices.estimateUsd(it.model, it.inputTokens, it.outputTokens) }
             Text(
                 "This month: ${usage.size} AI request${if (usage.size == 1) "" else "s"} (${usage.size - ok.size} failed) · ${"%,d".format(inTok)} input / ${"%,d".format(outTok)} output tokens" +
-                    if (s.ai.mode == AiMode.OWN_KEY && ok.isNotEmpty()) " · about $${"%.2f".format(cost)} at list prices" else "",
+                    when {
+                        s.ai.mode == AiMode.OWN_KEY && ok.isNotEmpty() -> " · about $${"%.2f".format(cost)} at list prices"
+                        s.ai.mode == AiMode.GEMINI -> " · free tier"
+                        else -> ""
+                    },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,4 +298,48 @@ fun AiSettingsSection(vm: AppViewModel) {
         }
     }
     if (showConsent) AiConsentDialog(vm, onDismiss = { showConsent = false }) { showConsent = false; scope.launch { tick++ } }
+}
+
+/** Gemini: the app's shared keys, or the user's own keys (several are used in turn). */
+@Composable
+private fun GeminiKeys(vm: AppViewModel, monthlyLimit: Int, model: String, onChanged: () -> Unit) {
+    val nav = LocalNav.current
+    var keys by remember { mutableStateOf(vm.ai.userGeminiKeys()) }
+    var input by remember { mutableStateOf("") }
+    var modelInput by remember(model) { mutableStateOf(model) }
+    fun save(k: List<String>) { vm.ai.setUserGeminiKeys(k); keys = vm.ai.userGeminiKeys(); onChanged() }
+
+    Text(
+        if (keys.isEmpty() && vm.ai.builtInGeminiKeyCount > 0)
+            "Using the app's shared free keys (${vm.ai.builtInGeminiKeyCount}), up to $monthlyLimit requests a month on this phone. Add your own free key to use your own quota instead."
+        else if (keys.isEmpty()) "Add a free Gemini API key from aistudio.google.com (Get API key). No card needed."
+        else "Using your ${keys.size} key${if (keys.size == 1) "" else "s"}, taking turns. If one hits its free-tier limit the next is used.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    keys.forEachIndexed { i, k ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Key ${i + 1}: ${k.take(6)}…${k.takeLast(4)}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { save(keys - k) }) { Text("Remove") }
+        }
+    }
+    OutlinedTextField(
+        input, { input = it.trim() }, label = { Text(if (keys.isEmpty()) "Your Gemini API key" else "Add another key") }, singleLine = true,
+        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (input.isNotBlank()) {
+        OutlinedButton(onClick = {
+            if (input.length < 30) nav.showMessage("That doesn't look like a Gemini API key.")
+            else { save(keys + input); input = ""; nav.showMessage("Key saved") }
+        }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Save key") }
+    }
+    Text("Keys are stored encrypted on this phone and never included in backups. Gemini's limits are per Google Cloud project, so extra keys only help if they come from different projects.",
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(
+        modelInput, { modelInput = it.trim() }, label = { Text("Model (optional)") }, singleLine = true,
+        placeholder = { Text("${app.levelup2027.ai.GeminiClient.PLAN_MODEL} (default)") }, modifier = Modifier.fillMaxWidth(),
+    )
+    if (modelInput != model) {
+        OutlinedButton(onClick = { vm.updateSettings { it.copy(ai = it.ai.copy(geminiModel = modelInput)) } }, modifier = Modifier.fillMaxWidth()) { Text("Save model") }
+    }
 }

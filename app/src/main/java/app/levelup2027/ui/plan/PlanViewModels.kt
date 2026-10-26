@@ -145,7 +145,7 @@ class PlanBuilderViewModel(private val c: AppContainer) : ViewModel() {
             checkReady(c)?.let { _state.value = _state.value.copy(block = it); return@launch }
             val answers = answersList(s)
             persist { it.copy(answersJson = AiJson.encodeToString(ListSerializer(QuestionAnswer.serializer()), answers)) }
-            _state.value = s.copy(step = BuilderStep.WORKING, working = if (feedback.isBlank() && s.plan == null) "Building your plan… this can take a minute." else "Revising your plan…", block = null)
+            _state.value = s.copy(step = BuilderStep.WORKING, working = if (feedback.isBlank() && s.plan == null) "Building your plan… this usually takes under a minute." else "Revising your plan…", block = null)
             val payload = ContextBuilder.plan(
                 Dates.today(), startDate(), s.text, s.intake, answers, repo.getCategories(), repo.getGoals(),
                 repo.settings.current().capacity, previousSummary = s.plan?.draft?.summary.orEmpty(), feedback = feedback,
