@@ -1,6 +1,5 @@
 package app.levelup2027.domain
 
-import app.levelup2027.data.Category
 import app.levelup2027.data.Completion
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.SkipReason
@@ -42,7 +41,7 @@ object Xp {
         when (it.completionType) {
             CompletionType.IDEAL -> IDEAL
             CompletionType.MINIMUM -> MINIMUM
-            CompletionType.SKIPPED -> 0
+            CompletionType.SKIPPED, CompletionType.RESCHEDULED -> 0
         }
     }
 
@@ -63,17 +62,17 @@ object Xp {
 
 data class SkippedTask(val title: String, val count: Int, val topReason: SkipReason?)
 
+/** Done vs. planned for one category or goal in a period. */
+data class GroupCount(val id: String?, val done: Int, val planned: Int)
+
 data class WeeklyStats(
     val weekStart: LocalDate,
     val weekEnd: LocalDate,
     val progress: DailyProgress,
     val workouts: Int,
     val workoutsPlanned: Int,
-    val techSessions: Int,
-    val techPlanned: Int,
-    val businessActions: Int,
-    val businessPlanned: Int,
-    val financeActions: Int,
+    val byCategory: List<GroupCount>,
+    val byGoal: List<GroupCount>,
     val frequentlySkipped: List<SkippedTask>,
     val observations: List<String>,
 )
@@ -85,22 +84,22 @@ object WeeklyStatsCalculator {
         today: LocalDate,
         tasks: List<Task>,
         completions: List<Completion>,
-        enabledCategories: Set<Category>? = null,
+        hiddenCategories: Set<String> = emptySet(),
     ): WeeklyStats {
         val weekEnd = weekStart.plusDays(6)
         // Only count days that have happened (including today) so a half-finished week isn't judged as failed.
         val lastDay = if (today.isBefore(weekEnd)) today else weekEnd
         val occ = generateSequence(weekStart) { it.plusDays(1) }
             .takeWhile { !it.isAfter(lastDay) }
-            .flatMap { ScheduleEngine.occurrencesFor(it, tasks, completions, enabledCategories) }
+            .flatMap { ScheduleEngine.occurrencesFor(it, tasks, completions, hiddenCategories) }
             .toList()
         val progress = DailyProgress.of(occ)
 
         fun count(pred: (Occurrence) -> Boolean) = occ.count { pred(it) && it.isDone } to occ.count(pred)
         val (workouts, workoutsPlanned) = count { it.task.countsAsWorkout }
-        val (tech, techPlanned) = count { it.task.category == Category.TECHNICAL }
-        val (biz, bizPlanned) = count { it.task.category == Category.BUSINESS }
-        val finance = occ.count { it.task.category == Category.FINANCE && it.isDone }
+        fun groups(key: (Occurrence) -> String?) = occ.groupBy(key)
+            .map { (id, l) -> GroupCount(id, l.count { it.isDone }, l.size) }
+            .sortedByDescending { it.planned }
 
         val skipped = occ.filter { it.isSkipped }
             .groupBy { it.task.id }
@@ -114,7 +113,8 @@ object WeeklyStatsCalculator {
             .sortedByDescending { it.count }
 
         return WeeklyStats(
-            weekStart, weekEnd, progress, workouts, workoutsPlanned, tech, techPlanned, biz, bizPlanned, finance,
+            weekStart, weekEnd, progress, workouts, workoutsPlanned,
+            groups { it.task.category }, groups { it.task.goalId },
             skipped, observations(occ),
         )
     }

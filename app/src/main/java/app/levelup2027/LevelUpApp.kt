@@ -3,6 +3,8 @@ package app.levelup2027
 import android.app.Application
 import android.content.Context
 import androidx.room.withTransaction
+import app.levelup2027.ai.AiService
+import app.levelup2027.ai.KeystoreSecretStore
 import app.levelup2027.data.AppDatabase
 import app.levelup2027.data.BackupManager
 import app.levelup2027.data.DataStoreSettings
@@ -24,7 +26,7 @@ class LevelUpApp : Application() {
         container = AppContainer(this)
         Notifications.createChannel(this)
         container.appScope.launch {
-            container.repository.ensureSeeded()
+            container.repository.ensureDefaults()
             ReminderScheduler.scheduleAll(this@LevelUpApp, container.settings.current())
         }
     }
@@ -40,6 +42,8 @@ class AppContainer(context: Context) {
         completionDao = db.completions(),
         goalDao = db.goals(),
         reviewDao = db.reviews(),
+        categoryDao = db.categories(),
+        planDao = db.plan(),
         settings = settings,
         runInTransaction = { block -> db.withTransaction { block() } },
         onChanged = { kind ->
@@ -50,6 +54,8 @@ class AppContainer(context: Context) {
         },
     )
     val backup = BackupManager(db, settings)
+    val secrets = KeystoreSecretStore(appContext)
+    val ai = AiService(settings, secrets, db.aiUsage(), BuildConfig.AI_SERVER_URL)
 }
 
 val Context.container: AppContainer get() = (applicationContext as LevelUpApp).container

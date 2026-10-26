@@ -54,7 +54,7 @@ import app.levelup2027.domain.DateFmt
 import app.levelup2027.domain.WidgetItem
 import app.levelup2027.domain.WidgetState
 import app.levelup2027.ui.theme.Palette
-import app.levelup2027.ui.theme.color
+import app.levelup2027.ui.theme.categoryColor
 import java.time.LocalDate
 
 object WidgetUpdater {
@@ -155,7 +155,7 @@ private fun Header(state: WidgetState, compact: Boolean) {
         verticalAlignment = Alignment.Vertical.CenterVertically,
     ) {
         Column(modifier = GlanceModifier.defaultWeight()) {
-            Text("LEVEL UP 2027", style = TextStyle(color = gold, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Text("ASCEND", style = TextStyle(color = gold, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
             val sub = buildString {
                 append(DateFmt.widget(state.date))
                 state.config.slot?.let { append(" · ").append(it.shortLabel) }
@@ -233,7 +233,7 @@ private fun TaskRow(item: WidgetItem, showLine: Boolean) {
                 .clickable(actionStartActivity<MainActivity>(params)),
         ) {
             Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-                Box(modifier = GlanceModifier.size(8.dp).cornerRadius(4.dp).background(item.category.color)) {}
+                Box(modifier = GlanceModifier.size(8.dp).cornerRadius(4.dp).background(categoryColor(item.colorIndex))) {}
                 Spacer(GlanceModifier.width(6.dp))
                 Text(
                     item.title,

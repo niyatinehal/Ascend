@@ -1,6 +1,6 @@
 package app.levelup2027
 
-import app.levelup2027.data.Category
+import app.levelup2027.data.Cat
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.SkipReason
 import app.levelup2027.data.TimeSlot
@@ -62,8 +62,8 @@ class ProgressAndWidgetTest {
     }
 
     @Test fun `weekly stats count gym and tech sessions and skip patterns`() {
-        val gym = task("gym", rule = "WEEKLY:MON,TUE,THU,FRI", category = Category.FITNESS).copy(countsAsWorkout = true)
-        val tech = task("tech", rule = "WEEKLY:MON,TUE", category = Category.TECHNICAL)
+        val gym = task("gym", rule = "WEEKLY:MON,TUE,THU,FRI", category = Cat.FITNESS).copy(countsAsWorkout = true)
+        val tech = task("tech", rule = "WEEKLY:MON,TUE", category = Cat.LEARNING)
         val comps = listOf(
             done("gym", mon), done("gym", mon.plusDays(1), CompletionType.MINIMUM),
             done("gym", mon.plusDays(3), CompletionType.SKIPPED).copy(skipReason = SkipReason.TOO_TIRED),
@@ -73,8 +73,9 @@ class ProgressAndWidgetTest {
         val stats = WeeklyStatsCalculator.compute(mon, mon.plusDays(6), listOf(gym, tech), comps)
         assertEquals(2, stats.workouts)
         assertEquals(4, stats.workoutsPlanned)
-        assertEquals(1, stats.techSessions)
-        assertEquals(2, stats.techPlanned)
+        val learning = stats.byCategory.single { it.id == Cat.LEARNING }
+        assertEquals(1, learning.done)
+        assertEquals(2, learning.planned)
         assertEquals("gym", stats.frequentlySkipped.single().title)
         assertEquals(SkipReason.TOO_TIRED, stats.frequentlySkipped.single().topReason)
         assertTrue(stats.observations.any { it.contains("Too tired") })
@@ -93,24 +94,24 @@ class ProgressAndWidgetTest {
             task("e", rule = "DAILY", slot = TimeSlot.EVENING),
         )
         val comps = listOf(done("m", mon))
-        val s = WidgetStateBuilder.build(mon, tasks, comps, Category.entries.toSet(), WidgetConfig(), lowEnergy = false)
+        val s = WidgetStateBuilder.build(mon, tasks, comps, emptySet(), WidgetConfig(), lowEnergy = false)
         assertEquals(1, s.done)
         assertEquals(3, s.scheduled)
         assertEquals(listOf("w", "e"), s.items.map { it.taskId })
-        val withDone = WidgetStateBuilder.build(mon, tasks, comps, Category.entries.toSet(), WidgetConfig(showCompleted = true), false)
+        val withDone = WidgetStateBuilder.build(mon, tasks, comps, emptySet(), WidgetConfig(showCompleted = true), false)
         assertEquals(listOf("w", "e", "m"), withDone.items.map { it.taskId })
         assertTrue(withDone.items.last().done)
     }
 
     @Test fun `widget slot and category filters affect items and counts`() {
         val tasks = listOf(
-            task("w1", rule = "DAILY", slot = TimeSlot.WORK, category = Category.TECHNICAL),
-            task("w2", rule = "DAILY", slot = TimeSlot.WORK, category = Category.BUSINESS),
+            task("w1", rule = "DAILY", slot = TimeSlot.WORK, category = Cat.LEARNING),
+            task("w2", rule = "DAILY", slot = TimeSlot.WORK, category = Cat.BUSINESS),
             task("e", rule = "DAILY", slot = TimeSlot.EVENING),
         )
         val s = WidgetStateBuilder.build(
-            mon, tasks, emptyList(), Category.entries.toSet(),
-            WidgetConfig(slot = TimeSlot.WORK, categories = setOf(Category.TECHNICAL)), false,
+            mon, tasks, emptyList(), emptySet(),
+            WidgetConfig(slot = TimeSlot.WORK, categories = setOf(Cat.LEARNING)), false,
         )
         assertEquals(listOf("w1"), s.items.map { it.taskId })
         assertEquals(1, s.scheduled)
@@ -118,9 +119,9 @@ class ProgressAndWidgetTest {
 
     @Test fun `widget shows minimum text in minimum mode or on low-energy days`() {
         val tasks = listOf(task("a", rule = "DAILY"))
-        val ideal = WidgetStateBuilder.build(mon, tasks, emptyList(), Category.entries.toSet(), WidgetConfig(), false)
-        val min = WidgetStateBuilder.build(mon, tasks, emptyList(), Category.entries.toSet(), WidgetConfig(mode = WidgetMode.MINIMUM), false)
-        val low = WidgetStateBuilder.build(mon, tasks, emptyList(), Category.entries.toSet(), WidgetConfig(), true)
+        val ideal = WidgetStateBuilder.build(mon, tasks, emptyList(), emptySet(), WidgetConfig(), false)
+        val min = WidgetStateBuilder.build(mon, tasks, emptyList(), emptySet(), WidgetConfig(mode = WidgetMode.MINIMUM), false)
+        val low = WidgetStateBuilder.build(mon, tasks, emptyList(), emptySet(), WidgetConfig(), true)
         assertEquals("ideal", ideal.items.single().line)
         assertEquals("min", min.items.single().line)
         assertEquals("min", low.items.single().line)

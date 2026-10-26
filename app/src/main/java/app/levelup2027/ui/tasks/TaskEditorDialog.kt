@@ -49,9 +49,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import app.levelup2027.data.Category
+import app.levelup2027.data.Cat
 import app.levelup2027.data.EnergyLevel
-import app.levelup2027.data.GoalIds
 import app.levelup2027.data.Task
 import app.levelup2027.data.TimeSlot
 import app.levelup2027.domain.DateFmt
@@ -80,11 +79,14 @@ fun <T> ChipChoice(options: List<T>, selected: T, label: (T) -> String, onSelect
 fun TaskEditorDialog(vm: AppViewModel, original: Task?, onDismiss: () -> Unit) {
     val nav = LocalNav.current
     val today by vm.today.collectAsState()
+    val categories by vm.categories.collectAsState()
+    val goals by vm.goals.collectAsState()
+    val catalog = app.levelup2027.ui.LocalCatalog.current
     val base = original
 
     var title by rememberSaveable { mutableStateOf(base?.title ?: "") }
     var description by rememberSaveable { mutableStateOf(base?.description ?: "") }
-    var category by rememberSaveable { mutableStateOf(base?.category ?: Category.TECHNICAL) }
+    var category by rememberSaveable { mutableStateOf(base?.category ?: Cat.LEARNING) }
     var slot by rememberSaveable { mutableStateOf(base?.timeSlot ?: TimeSlot.EVENING) }
     var goalId by rememberSaveable { mutableStateOf(base?.goalId) }
     var energy by rememberSaveable { mutableStateOf(base?.energyLevel ?: EnergyLevel.MEDIUM) }
@@ -101,6 +103,7 @@ fun TaskEditorDialog(vm: AppViewModel, original: Task?, onDismiss: () -> Unit) {
     var resources by rememberSaveable { mutableStateOf(base?.resources ?: "") }
     var workout by rememberSaveable { mutableStateOf(base?.countsAsWorkout ?: false) }
     var enabled by rememberSaveable { mutableStateOf(base?.enabled ?: true) }
+    var priority by rememberSaveable { mutableStateOf(base?.priority ?: 2) }
     var pickingDate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -125,7 +128,8 @@ fun TaskEditorDialog(vm: AppViewModel, original: Task?, onDismiss: () -> Unit) {
             title = title.trim(), description = description.trim(), category = category, timeSlot = slot, goalId = goalId,
             energyLevel = energy, idealDescription = ideal.trim(), minimumDescription = minimum.trim(),
             estimatedIdealMinutes = im!!, estimatedMinimumMinutes = mm!!, notes = notes.trim(), resources = resources.trim(),
-            countsAsWorkout = workout, enabled = enabled,
+            countsAsWorkout = workout, enabled = enabled, priority = priority,
+            source = base?.source ?: app.levelup2027.data.Source.MANUAL,
             scheduledDate = if (oneTime) date else null,
             recurrenceRule = if (oneTime) null else Recurrence(days).encode(),
             // A one-time task only replaces a recurring one if it was created that way (curriculum).
@@ -171,9 +175,11 @@ fun TaskEditorDialog(vm: AppViewModel, original: Task?, onDismiss: () -> Unit) {
                     Overline("Time of day")
                     ChipChoice(TimeSlot.entries, slot, { it.label }) { slot = it }
                     Overline("Category")
-                    ChipChoice(Category.entries, category, { it.label }) { category = it }
+                    ChipChoice(categories.filter { it.enabled || it.id == category }.map { it.id }, category, { catalog.category(it).name }) { category = it }
                     Overline("Linked goal")
-                    ChipChoice(listOf<String?>(null) + GoalIds.ALL, goalId, { GoalIds.shortName(it) }) { goalId = it }
+                    ChipChoice(listOf<String?>(null) + goals.filter { it.isActive || it.id == goalId }.map { it.id }, goalId, { catalog.goalName(it) }) { goalId = it }
+                    Overline("Priority")
+                    ChipChoice(listOf(1, 2, 3), priority, { listOf("High", "Normal", "Low")[it - 1] }) { priority = it }
                     Overline("Effort")
                     ChipChoice(EnergyLevel.entries, energy, { it.label }) { energy = it }
 

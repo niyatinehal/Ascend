@@ -1,8 +1,7 @@
 package app.levelup2027.domain
 
-import app.levelup2027.data.Campaign
-import app.levelup2027.data.Category
 import app.levelup2027.data.Completion
+import app.levelup2027.data.CompletionType
 import app.levelup2027.data.Task
 import app.levelup2027.data.TimeSlot
 import kotlinx.coroutines.delay
@@ -58,7 +57,7 @@ fun shortDay(d: DayOfWeek) = d.name.take(1) + d.name.substring(1, 3).lowercase()
 /** A task resolved onto a concrete local calendar date, with its completion record if any. */
 data class Occurrence(val task: Task, val date: LocalDate, val completion: Completion?) {
     val isDone get() = completion?.isDone == true
-    val isSkipped get() = completion?.completionType == app.levelup2027.data.CompletionType.SKIPPED
+    val isSkipped get() = completion?.completionType == CompletionType.SKIPPED
     val isOpen get() = completion == null
 }
 
@@ -69,9 +68,7 @@ object ScheduleEngine {
         if (!task.enabled) return false
         task.scheduledDate?.let { return it == date }
         val rec = Recurrence.parse(task.recurrenceRule) ?: return false
-        val from = task.activeFrom ?: Campaign.START
-        val until = task.activeUntil ?: Campaign.END
-        if (date.isBefore(from) || date.isAfter(until)) return false
+        if (task.activeFrom?.let(date::isBefore) == true || task.activeUntil?.let(date::isAfter) == true) return false
         return rec.matches(date)
     }
 
@@ -79,22 +76,24 @@ object ScheduleEngine {
      * All tasks due on [date]: recurring + one-time, minus recurring tasks superseded by a one-time
      * task on the same date. Each task appears at most once. Sorted by slot, then sortOrder.
      */
-    fun tasksFor(date: LocalDate, tasks: List<Task>, enabledCategories: Set<Category>? = null): List<Task> {
-        val due = tasks.filter { isScheduledOn(it, date) && (enabledCategories == null || it.category in enabledCategories) }
+    fun tasksFor(date: LocalDate, tasks: List<Task>, hiddenCategories: Set<String> = emptySet()): List<Task> {
+        val due = tasks.filter { isScheduledOn(it, date) && it.category !in hiddenCategories }
         val superseded = due.mapNotNullTo(HashSet()) { it.supersedesTaskId }
         return due.filter { it.id !in superseded }
             .distinctBy { it.id }
             .sortedWith(compareBy<Task>({ it.timeSlot.ordinal }, { it.sortOrder }, { it.title }))
     }
 
+    /** Occurrences on [date]. An occurrence that was moved to another day no longer counts here. */
     fun occurrencesFor(
         date: LocalDate,
         tasks: List<Task>,
         completions: List<Completion>,
-        enabledCategories: Set<Category>? = null,
+        hiddenCategories: Set<String> = emptySet(),
     ): List<Occurrence> {
         val byTask = completions.filter { it.scheduledDate == date }.associateBy { it.taskId }
-        return tasksFor(date, tasks, enabledCategories).map { Occurrence(it, date, byTask[it.id]) }
+        return tasksFor(date, tasks, hiddenCategories).map { Occurrence(it, date, byTask[it.id]) }
+            .filter { it.completion?.completionType != CompletionType.RESCHEDULED }
     }
 
     /**
@@ -106,13 +105,13 @@ object ScheduleEngine {
         today: LocalDate,
         tasks: List<Task>,
         completions: List<Completion>,
-        enabledCategories: Set<Category>? = null,
+        hiddenCategories: Set<String> = emptySet(),
     ): List<Occurrence> {
         val recorded = completions.mapTo(HashSet()) { it.taskId to it.scheduledDate }
         return tasks.filter { t ->
             val d = t.scheduledDate
             t.enabled && d != null && d.isBefore(today) &&
-                (enabledCategories == null || t.category in enabledCategories) &&
+                t.category !in hiddenCategories &&
                 (t.id to d) !in recorded
         }.sortedWith(compareBy({ it.scheduledDate }, { it.timeSlot.ordinal }, { it.sortOrder }))
             .map { Occurrence(it, it.scheduledDate!!, null) }
@@ -163,8 +162,7 @@ object Dates {
         }
     }.distinctUntilChanged()
 
-    fun campaignDay(date: LocalDate): Long = java.time.temporal.ChronoUnit.DAYS.between(Campaign.START, date) + 1
-    fun campaignLength(): Long = java.time.temporal.ChronoUnit.DAYS.between(Campaign.START, Campaign.END) + 1
+    fun dayNumber(start: LocalDate, date: LocalDate): Long = java.time.temporal.ChronoUnit.DAYS.between(start, date) + 1
     fun daysUntil(from: LocalDate, to: LocalDate): Long = java.time.temporal.ChronoUnit.DAYS.between(from, to)
 }
 

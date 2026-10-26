@@ -51,6 +51,7 @@ class WidgetConfigActivity : ComponentActivity() {
         val repo = container.repository
         setContent {
             val settings by repo.settings.flow.collectAsState(initial = null)
+            val categories by repo.categories.collectAsState(initial = emptyList())
             val s = settings ?: return@setContent
             LevelUpTheme(s.theme) {
                 var draft by remember(s.widget) { mutableStateOf(s.widget) }
@@ -63,7 +64,7 @@ class WidgetConfigActivity : ComponentActivity() {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(12.dp))
-                        WidgetSettingsEditor(draft, onChange = { draft = it })
+                        WidgetSettingsEditor(draft, categories, onChange = { draft = it })
                         Spacer(Modifier.height(16.dp))
                         Button(
                             onClick = { save(draft, resultValue) },

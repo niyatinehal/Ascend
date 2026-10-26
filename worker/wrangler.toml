@@ -1,0 +1,27 @@
+# Ascend AI server (Cloudflare Worker). See README.md in this folder for setup.
+name = "ascend-ai"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Usage counters and device tokens. Create with: npx wrangler@4 kv namespace create USAGE
+# then paste the id here.
+[[kv_namespaces]]
+binding = "USAGE"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+[vars]
+# Per-device limits.
+DAILY_REQUEST_LIMIT = "15"
+MONTHLY_REQUEST_LIMIT = "120"
+MONTHLY_OUTPUT_TOKEN_LIMIT = "400000"
+# Whole-server safety cap per UTC day, across all devices.
+GLOBAL_DAILY_REQUEST_LIMIT = "2000"
+# New device registrations allowed per network (hashed IP) per day.
+REGISTRATIONS_PER_IP_PER_DAY = "5"
+# Only accept the system prompts shipped in the app (see src/prompt-hashes.json). Set to "false" while developing prompts.
+ENFORCE_PROMPT_HASHES = "true"
+
+# Secrets (never put these in this file):
+#   npx wrangler@4 secret put ANTHROPIC_API_KEY
+#   npx wrangler@4 secret put ADMIN_TOKEN

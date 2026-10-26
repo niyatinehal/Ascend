@@ -1,0 +1,16 @@
+{
+  "name": "ascend-ai-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ascend AI server: keeps the Anthropic API key off phones, picks the model per operation, enforces per-device quotas.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/",
+    "dev": "npx wrangler@4 dev",
+    "deploy": "npx wrangler@4 deploy"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0"
+  }
+}

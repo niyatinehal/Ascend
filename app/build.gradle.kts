@@ -8,6 +8,11 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 // Optional release signing: create keystore.properties in the project root (see README).
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
@@ -22,8 +27,12 @@ android {
         applicationId = "app.levelup2027"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
+        // The Ascend AI server (worker/). Set ascendAiServerUrl in local.properties or gradle.properties;
+        // empty means server mode is unavailable and users can bring their own API key instead.
+        val aiServer = (localProps.getProperty("ascendAiServerUrl") ?: (project.findProperty("ascendAiServerUrl") as String?) ?: "")
+        buildConfigField("String", "AI_SERVER_URL", "\"$aiServer\"")
     }
 
     signingConfigs {
@@ -56,6 +65,10 @@ android {
         buildConfig = true
     }
     testOptions { unitTests.isReturnDefaultValues = true }
+    packaging {
+        // Duplicate licence/metadata files from the Anthropic SDK's transitive dependencies.
+        resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/INDEX.LIST", "META-INF/*.md")
+    }
 }
 
 ksp {
@@ -85,6 +98,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
+    // Claude API (only used in "own API key" mode; server mode talks to the Ascend AI server).
+    implementation("com.anthropic:anthropic-java:2.34.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
 }

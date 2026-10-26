@@ -31,9 +31,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import app.levelup2027.container
 import app.levelup2027.data.Task
 import app.levelup2027.data.TimeSlot
 import app.levelup2027.ui.goals.GoalsScreen
+import app.levelup2027.ui.plan.AdjustSheet
+import app.levelup2027.ui.plan.AdjustViewModel
+import app.levelup2027.ui.plan.PlanBuilderScreen
+import app.levelup2027.ui.plan.PlanBuilderViewModel
+import app.levelup2027.ui.plan.WeekPlanSheet
+import app.levelup2027.ui.plan.WeekPlanViewModel
 import app.levelup2027.ui.review.ReviewScreen
 import app.levelup2027.ui.settings.SettingsScreen
 import app.levelup2027.ui.tasks.AllTasksScreen
@@ -59,13 +70,27 @@ class AppNav(
     val editTask: (Task?) -> Unit,
     val goTo: (Tab) -> Unit,
     val showMessage: (String) -> Unit,
+    /** The weekly schedule view in the Tasks tab. */
     val openWeekPlan: () -> Unit,
+    val openPlanBuilder: () -> Unit = {},
+    val openAdjust: () -> Unit = {},
+    val planNextWeek: (LocalDate) -> Unit = {},
+    val openAiSettings: () -> Unit = {},
 )
 
 val LocalNav = compositionLocalOf<AppNav> { error("no nav") }
 
 @Composable
 fun AppRoot(vm: AppViewModel, openRequests: MutableStateFlow<OpenRequest?>) {
+    val container = LocalContext.current.container
+    val builderVm: PlanBuilderViewModel = viewModel(factory = viewModelFactory { initializer { PlanBuilderViewModel(container) } })
+    val adjustVm: AdjustViewModel = viewModel(factory = viewModelFactory { initializer { AdjustViewModel(container) } })
+    val weekVm: WeekPlanViewModel = viewModel(factory = viewModelFactory { initializer { WeekPlanViewModel(container) } })
+    val settings by vm.settings.collectAsState()
+    val catalog by vm.catalog.collectAsState()
+    var builderOpen by rememberSaveable { mutableStateOf(false) }
+    var adjustOpen by rememberSaveable { mutableStateOf(false) }
+    var weekToPlan by remember { mutableStateOf<LocalDate?>(null) }
     var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
     var detail by remember { mutableStateOf<Pair<String, LocalDate?>?>(null) }
     var editing by remember { mutableStateOf<Task?>(null) }
@@ -93,12 +118,33 @@ fun AppRoot(vm: AppViewModel, openRequests: MutableStateFlow<OpenRequest?>) {
             goTo = { tab = it },
             showMessage = { message = it },
             openWeekPlan = { weekPlanRequested = true; tab = Tab.TASKS },
+            openPlanBuilder = { builderOpen = true },
+            openAdjust = { adjustOpen = true },
+            planNextWeek = { weekToPlan = it },
+            openAiSettings = { builderOpen = false; tab = Tab.SETTINGS },
         )
     }
 
+    val s = settings
+    if (s == null) return
+    val onboarding = !s.onboardingDone
+
     BackHandler(enabled = tab != Tab.TODAY) { tab = Tab.TODAY }
 
-    CompositionLocalProvider(LocalNav provides nav) {
+    CompositionLocalProvider(LocalNav provides nav, LocalCatalog provides catalog) {
+        if (onboarding || builderOpen) {
+            PlanBuilderScreen(
+                vm, builderVm, isOnboarding = onboarding,
+                // Closing keeps an unfinished draft so it can be resumed; only a finished one is cleared.
+                onClose = {
+                    builderOpen = false
+                    if (builderVm.state.value.step == app.levelup2027.ui.plan.BuilderStep.DONE) builderVm.finish()
+                    tab = Tab.TODAY
+                },
+                onOpenAiSettings = { builderOpen = false; if (onboarding) vm.updateSettings { it.copy(onboardingDone = true) }; tab = Tab.SETTINGS },
+            )
+            return@CompositionLocalProvider
+        }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { SnackbarHost(snackbar) },
@@ -129,6 +175,8 @@ fun AppRoot(vm: AppViewModel, openRequests: MutableStateFlow<OpenRequest?>) {
         detail?.let { (id, date) ->
             TaskDetailSheet(vm, taskId = id, requestedDate = date, onDismiss = { detail = null })
         }
+        if (adjustOpen) AdjustSheet(vm, adjustVm, onDismiss = { adjustOpen = false }, onOpenAiSettings = { tab = Tab.SETTINGS })
+        weekToPlan?.let { w -> WeekPlanSheet(vm, weekVm, w, onDismiss = { weekToPlan = null }, onOpenAiSettings = { tab = Tab.SETTINGS }) }
         if (creating || editing != null) {
             TaskEditorDialog(
                 vm = vm,

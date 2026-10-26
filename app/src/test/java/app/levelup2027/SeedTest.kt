@@ -1,7 +1,7 @@
 package app.levelup2027
 
 import app.levelup2027.data.Campaign
-import app.levelup2027.data.Category
+import app.levelup2027.data.Cat
 import app.levelup2027.data.EnergyLevel
 import app.levelup2027.data.GoalIds
 import app.levelup2027.data.Seed
@@ -108,7 +108,7 @@ class SeedTest {
         assertTrue(Seed.checkpointTasks.isNotEmpty())
         Seed.checkpointTasks.forEach {
             assertEquals(DayOfWeek.SUNDAY, it.scheduledDate!!.dayOfWeek)
-            assertEquals(Category.PLANNING, it.category)
+            assertEquals(Cat.PLANNING, it.category)
         }
         assertNotNull(Seed.checkpointTasks.firstOrNull { it.id == "checkpoint-2026-12" })
     }

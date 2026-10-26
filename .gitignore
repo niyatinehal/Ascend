@@ -6,3 +6,5 @@ local.properties
 keystore/
 keystore.properties
 dist/
+worker/node_modules/
+worker/.wrangler/

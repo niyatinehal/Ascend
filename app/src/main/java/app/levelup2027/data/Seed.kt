@@ -22,7 +22,7 @@ object Seed {
     private fun bullets(vararg lines: String) = lines.joinToString("\n") { "• $it" }
 
     private fun recurring(
-        id: String, title: String, description: String, category: Category, slot: TimeSlot,
+        id: String, title: String, description: String, category: String, slot: TimeSlot,
         ideal: String, minimum: String, idealMin: Int, minMin: Int, rule: String, goalId: String?,
         energy: EnergyLevel, sort: Int, workout: Boolean = false, resources: String = "", notes: String = "",
         activeFrom: LocalDate? = null,
@@ -31,7 +31,7 @@ object Seed {
         idealDescription = ideal, minimumDescription = minimum, estimatedIdealMinutes = idealMin,
         estimatedMinimumMinutes = minMin, recurrenceRule = rule, goalId = goalId, energyLevel = energy,
         sortOrder = sort, countsAsWorkout = workout, resources = resources, notes = notes,
-        activeFrom = activeFrom, isSeed = true,
+        activeFrom = activeFrom ?: Campaign.START, activeUntil = Campaign.END, isSeed = true, source = Source.SEED,
     )
 
     private fun weekly(vararg d: DayOfWeek) = Recurrence.weekly(*d)
@@ -46,7 +46,7 @@ object Seed {
         recurring(
             "daily-morning", "Morning routine & today's priorities",
             "Your normal morning, plus a quick look at today's plan.",
-            Category.PLANNING, TimeSlot.MORNING,
+            Cat.PLANNING, TimeSlot.MORNING,
             bullets("Follow your normal morning routine: breakfast, get ready", "Review today's tasks and pick the top priority"),
             bullets("Review today's top priority", "Begin getting ready"),
             15, 3, "DAILY", null, EnergyLevel.LOW, 0,
@@ -55,7 +55,7 @@ object Seed {
         recurring(
             "mon-work-question", "Capture one technical question",
             "A short note from your real work. Skip it if nothing meaningful came up.",
-            Category.TECHNICAL, TimeSlot.WORK,
+            Cat.LEARNING, TimeSlot.WORK,
             bullets("Record the problem, its context, and what you want to understand"),
             bullets("Write one question in a note"),
             10, 2, weekly(MONDAY), GoalIds.TECH, EnergyLevel.LOW, 10,
@@ -63,7 +63,7 @@ object Seed {
         recurring(
             "tue-work-backend", "Spot one backend concept at work",
             "Notice a backend idea in your job: an API, a query, a cache, a queue.",
-            Category.TECHNICAL, TimeSlot.WORK,
+            Cat.LEARNING, TimeSlot.WORK,
             bullets("Note one backend concept you met at work", "Write where you saw it and what you want to learn about it"),
             bullets("Write the concept's name in a note"),
             10, 2, weekly(TUESDAY), GoalIds.TECH, EnergyLevel.LOW, 10,
@@ -71,7 +71,7 @@ object Seed {
         recurring(
             "wed-work-bizproblem", "Record one operational or business problem",
             "Raw material for business discovery: slow, manual, error-prone work you see.",
-            Category.BUSINESS, TimeSlot.WORK,
+            Cat.BUSINESS, TimeSlot.WORK,
             bullets("Note a repetitive, slow or error-prone process", "Who suffers from it, and how often?"),
             bullets("Write the problem in one line"),
             10, 2, weekly(WEDNESDAY), GoalIds.BUSINESS, EnergyLevel.LOW, 10,
@@ -79,7 +79,7 @@ object Seed {
         recurring(
             "thu-work-failure", "Pick a system and one failure scenario",
             "Practise thinking like a designer about systems you already touch.",
-            Category.TECHNICAL, TimeSlot.WORK,
+            Cat.LEARNING, TimeSlot.WORK,
             bullets("Pick a system you work with", "Write one way it could fail and what would happen"),
             bullets("Name the system and one failure in a note"),
             10, 2, weekly(THURSDAY), GoalIds.TECH, EnergyLevel.LOW, 10,
@@ -87,7 +87,7 @@ object Seed {
         recurring(
             "fri-work-solved", "Record a problem you solved independently",
             "Evidence of independent engineering, useful later in interviews.",
-            Category.TECHNICAL, TimeSlot.WORK,
+            Cat.LEARNING, TimeSlot.WORK,
             bullets("Write the problem, the options you considered, and why you chose your solution"),
             bullets("Write one line about what you solved"),
             10, 2, weekly(FRIDAY), GoalIds.TECH, EnergyLevel.LOW, 10,
@@ -96,7 +96,7 @@ object Seed {
         recurring(
             "weekday-evening-review", "End-of-day review",
             "Dinner, prepare for tomorrow, and close the day.",
-            Category.PLANNING, TimeSlot.EVENING,
+            Cat.PLANNING, TimeSlot.EVENING,
             bullets("Eat dinner and prepare for tomorrow", "Write a short reflection: what got done, what got in the way"),
             bullets("Record one thing you completed", "Name tomorrow's first task"),
             10, 3, weekly(MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY), null, EnergyLevel.LOW, 90,
@@ -105,7 +105,7 @@ object Seed {
         recurring(
             "mon-tech-js", "JavaScript / TypeScript study",
             "Programming foundations.",
-            Category.TECHNICAL, TimeSlot.EVENING,
+            Cat.LEARNING, TimeSlot.EVENING,
             bullets("Study JavaScript or TypeScript for 30 minutes", "Practise one concept in code", "Explain it in your own words"),
             bullets("Study for 10 minutes", "Write one sentence explaining the concept"),
             30, 10, weekly(MONDAY), GoalIds.TECH, EnergyLevel.MEDIUM, 40, resources = JS_TOPICS,
@@ -113,7 +113,7 @@ object Seed {
         recurring(
             "mon-gym", "Gym: quads, glutes & core",
             "Training session 1 of 4 this week.",
-            Category.FITNESS, TimeSlot.EVENING,
+            Cat.FITNESS, TimeSlot.EVENING,
             bullets("Complete the planned quad, glute and core workout", "Record sets, reps and weights"),
             bullets("Do a shortened, safe version (main lift + one accessory) if appropriate"),
             60, 25, weekly(MONDAY), GoalIds.FITNESS, EnergyLevel.HIGH, 30, workout = true,
@@ -123,7 +123,7 @@ object Seed {
         recurring(
             "tue-tech-backend", "Backend engineering study",
             "One backend topic, understood properly.",
-            Category.TECHNICAL, TimeSlot.EVENING,
+            Cat.LEARNING, TimeSlot.EVENING,
             bullets(
                 "Study one backend topic for 35 minutes",
                 "Answer: what is it, what problem does it solve, how does it work, when to use it, what can go wrong",
@@ -134,7 +134,7 @@ object Seed {
         recurring(
             "tue-gym", "Gym: back & arms + pull-up progression",
             "Training session 2 of 4 this week.",
-            Category.FITNESS, TimeSlot.EVENING,
+            Cat.FITNESS, TimeSlot.EVENING,
             bullets(
                 "Complete the planned back and arm workout",
                 "Include a pull-up progression: dead hangs, negatives, band-assisted or scapular pulls",
@@ -147,7 +147,7 @@ object Seed {
         recurring(
             "wed-biz-discovery", "Business discovery",
             "Find real problems before building anything.",
-            Category.BUSINESS, TimeSlot.EVENING,
+            Cat.BUSINESS, TimeSlot.EVENING,
             bullets(
                 "Spend 30 minutes investigating a customer segment",
                 "Record one problem, one potential customer, and evidence to investigate",
@@ -158,7 +158,7 @@ object Seed {
         recurring(
             "wed-recovery", "Recovery: easy walk or mobility",
             "No gym today. Recovery is part of training.",
-            Category.RECOVERY, TimeSlot.EVENING,
+            Cat.HEALTH, TimeSlot.EVENING,
             bullets("Take an easy walk or do gentle mobility", "Prioritise recovery and sleep"),
             bullets("Take a short, comfortable walk, or simply rest"),
             25, 5, weekly(WEDNESDAY), GoalIds.FITNESS, EnergyLevel.LOW, 30,
@@ -167,7 +167,7 @@ object Seed {
         recurring(
             "thu-tech-sysdesign", "System design study",
             "Design decisions, failure modes and trade-offs.",
-            Category.TECHNICAL, TimeSlot.EVENING,
+            Cat.LEARNING, TimeSlot.EVENING,
             bullets(
                 "Study system design for 30 minutes",
                 "Draw a small diagram or explain one design decision",
@@ -179,7 +179,7 @@ object Seed {
         recurring(
             "thu-gym", "Gym: glutes & hamstrings",
             "Training session 3 of 4 this week.",
-            Category.FITNESS, TimeSlot.EVENING,
+            Cat.FITNESS, TimeSlot.EVENING,
             bullets("Complete the planned glute and hamstring workout", "Record sets, reps and weights"),
             bullets("Do a shortened, safe version if appropriate"),
             60, 25, weekly(THURSDAY), GoalIds.FITNESS, EnergyLevel.HIGH, 30, workout = true,
@@ -188,7 +188,7 @@ object Seed {
         recurring(
             "fri-tech-dsa", "DSA practice",
             "Interview problem-solving, one problem at a time.",
-            Category.CAREER, TimeSlot.EVENING,
+            Cat.CAREER, TimeSlot.EVENING,
             bullets(
                 "Attempt one problem independently first",
                 "Explain the approach and its time/space complexity",
@@ -200,7 +200,7 @@ object Seed {
         recurring(
             "fri-gym", "Gym: chest, shoulders & triceps + push-ups",
             "Training session 4 of 4 this week.",
-            Category.FITNESS, TimeSlot.EVENING,
+            Cat.FITNESS, TimeSlot.EVENING,
             bullets(
                 "Complete the planned chest, shoulder and triceps workout",
                 "Practise a push-up progression with good form (incline → knee → full)",
@@ -212,7 +212,7 @@ object Seed {
         recurring(
             "sat-tech-project", "Project: build one small feature",
             "Saturday morning deep work on your backend project.",
-            Category.TECHNICAL, TimeSlot.MORNING,
+            Cat.LEARNING, TimeSlot.MORNING,
             bullets(
                 "Spend 60–90 minutes implementing one small feature",
                 "Test it",
@@ -225,7 +225,7 @@ object Seed {
         recurring(
             "sat-biz-build", "Business: research, validate or build",
             "Saturday afternoon.",
-            Category.BUSINESS, TimeSlot.FLEXIBLE,
+            Cat.BUSINESS, TimeSlot.FLEXIBLE,
             bullets(
                 "Spend 60–90 minutes on customer research, validation, or building a validated solution",
                 "Record the evidence and your next step",
@@ -236,7 +236,7 @@ object Seed {
         recurring(
             "sat-easy-cardio", "Optional: easy walk or mobility",
             "Only if recovered. The evening is for rest.",
-            Category.FITNESS, TimeSlot.FLEXIBLE,
+            Cat.FITNESS, TimeSlot.FLEXIBLE,
             bullets("Take an easy walk or do mobility, if you feel recovered"),
             bullets("Rest. Recovery counts."),
             30, 0, weekly(SATURDAY), GoalIds.FITNESS, EnergyLevel.LOW, 30,
@@ -245,7 +245,7 @@ object Seed {
         recurring(
             "sun-fitness-checkin", "Weekly fitness check-in & recovery",
             "Track strength and habits, not only weight. Log numbers in Goals → Fitness.",
-            Category.FITNESS, TimeSlot.MORNING,
+            Cat.FITNESS, TimeSlot.MORNING,
             bullets(
                 "Record body weight (same conditions each week)",
                 "Note push-up and pull-up progress",
@@ -257,7 +257,7 @@ object Seed {
         recurring(
             "sun-tech-review", "Technical review",
             "Sunday afternoon: consolidate what you learned this week.",
-            Category.TECHNICAL, TimeSlot.FLEXIBLE,
+            Cat.LEARNING, TimeSlot.FLEXIBLE,
             bullets("Review one concept learned this week", "Explain it without reading your notes"),
             bullets("Spend 10 minutes reviewing one concept"),
             25, 10, weekly(SUNDAY), GoalIds.TECH, EnergyLevel.LOW, 20,
@@ -265,7 +265,7 @@ object Seed {
         recurring(
             "sun-finance", "Finances & parents' phone fund",
             "Emergency savings stay untouched. Log the balance in Goals → Parents' phones.",
-            Category.FINANCE, TimeSlot.EVENING,
+            Cat.FINANCE, TimeSlot.EVENING,
             bullets(
                 "Review this week's spending and savings",
                 "Update the parents' phone fund balance",
@@ -277,7 +277,7 @@ object Seed {
         recurring(
             "sun-weekly-review", "Weekly review & plan next week",
             "Use the Review tab to save your answers.",
-            Category.PLANNING, TimeSlot.EVENING,
+            Cat.PLANNING, TimeSlot.EVENING,
             bullets(
                 "Review the week's completed tasks",
                 "Record technical, fitness, business and financial progress",
@@ -290,7 +290,7 @@ object Seed {
         recurring(
             "sun-career-search", "Job search & interview practice",
             "From March 2027, aiming for ₹10–15 LPA remote/hybrid roles by June.",
-            Category.CAREER, TimeSlot.FLEXIBLE,
+            Cat.CAREER, TimeSlot.FLEXIBLE,
             bullets(
                 "Apply to 2–3 well-matched roles, or do one 20-minute mock interview",
                 "Log applications and interviews in Goals → Career",
@@ -421,19 +421,19 @@ object Seed {
     val goals: List<Goal> = listOf(
         Goal(GoalIds.CAREER, "Career: ₹10 LPA+ role",
             "Move from ₹6 LPA to at least ₹10 LPA (ideally ₹10–15 LPA or more) with remote/hybrid flexibility.",
-            "≥ ₹10 LPA (ideal ₹10–15 LPA+), remote/hybrid", Campaign.END, "₹6 LPA", "LPA", sortOrder = 0),
+            "≥ ₹10 LPA (ideal ₹10–15 LPA+), remote/hybrid", Campaign.END, "₹6 LPA", "LPA", sortOrder = 0, shortName = "Career", source = Source.SEED, categoryId = Cat.CAREER),
         Goal(GoalIds.FITNESS, "Fitness: strength & sustainable progress",
             "From approximately 63 kg toward 45–48 kg, while building to 5 strict pull-ups and 50 consecutive push-ups with good form. These are targets, not guarantees. No crash dieting, no unsafe training.",
-            "45–48 kg · 5 strict pull-ups · 50 push-ups", Campaign.END, "~63 kg (estimate)", "kg", sortOrder = 1),
+            "45–48 kg · 5 strict pull-ups · 50 push-ups", Campaign.END, "~63 kg (estimate)", "kg", sortOrder = 1, shortName = "Fitness", source = Source.SEED, categoryId = Cat.FITNESS),
         Goal(GoalIds.TECH, "Technical confidence",
             "Become an engineer who analyses problems, evaluates architectural options, explains trade-offs and proposes solutions, not only implements assigned tasks. Tracked through exercises and analysed problems, not a made-up percentage.",
-            "Demonstrated independent engineering reasoning", Campaign.END, "Starting out", "exercises", sortOrder = 2),
+            "Demonstrated independent engineering reasoning", Campaign.END, "Starting out", "exercises", sortOrder = 2, shortName = "Tech confidence", source = Source.SEED, categoryId = Cat.LEARNING),
         Goal(GoalIds.FAMILY, "New phones for both parents",
             "Save for two phones without compromising emergency savings. Target amount and date are editable.",
-            "₹35,000 phone fund", Campaign.END, "Not recorded yet", "₹", sortOrder = 3),
+            "₹35,000 phone fund", Campaign.END, "Not recorded yet", "₹", sortOrder = 3, shortName = "Parents' phones", source = Source.SEED, categoryId = Cat.FAMILY),
         Goal(GoalIds.BUSINESS, "Business: ₹10,000 MRR",
             "Start with little or no upfront investment (micro-SaaS or service-to-product) and work toward ₹10,000 monthly recurring revenue.",
-            "₹10,000 MRR", Campaign.END, "₹0 MRR (no business yet)", "₹/month", sortOrder = 4),
+            "₹10,000 MRR", Campaign.END, "₹0 MRR (no business yet)", "₹/month", sortOrder = 4, shortName = "Business", source = Source.SEED, categoryId = Cat.BUSINESS),
     )
 
     val milestones: List<Milestone> = listOf(
@@ -474,14 +474,14 @@ object Seed {
                 id = "checkpoint-${month.year}-${"%02d".format(month.monthValue)}",
                 title = "Roadmap checkpoint: ${month.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${month.year}",
                 description = "Milestones due this month:\n" + ms.joinToString("\n") { "• ${GoalIds.shortName(it.goalId)}: ${it.title}" },
-                category = Category.PLANNING, timeSlot = TimeSlot.EVENING,
+                category = Cat.PLANNING, timeSlot = TimeSlot.EVENING,
                 idealDescription = bullets(
                     "Compare where you are against each milestone above",
                     "Mark achieved milestones in Goals, or adjust the plan without judgement",
                 ),
                 minimumDescription = bullets("Write one sentence per goal on where you are"),
                 estimatedIdealMinutes = 30, estimatedMinimumMinutes = 10,
-                scheduledDate = sunday, goalId = null, energyLevel = EnergyLevel.LOW, sortOrder = 35, isSeed = true,
+                scheduledDate = sunday, goalId = null, energyLevel = EnergyLevel.LOW, sortOrder = 35, isSeed = true, source = Source.SEED,
             )
         }
 

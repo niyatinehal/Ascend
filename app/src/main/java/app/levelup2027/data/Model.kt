@@ -2,7 +2,7 @@ package app.levelup2027.data
 
 import java.time.LocalDate
 
-/** Campaign window and checkpoints. */
+/** The original Level Up 2027 campaign (used by the example plan only). */
 object Campaign {
     val START: LocalDate = LocalDate.of(2026, 10, 26)
     val END: LocalDate = LocalDate.of(2027, 12, 31)
@@ -10,15 +10,57 @@ object Campaign {
     val CAREER_CHECKPOINT: LocalDate = LocalDate.of(2027, 6, 30)
 }
 
-enum class Category(val label: String, val shortLabel: String) {
-    CAREER("Career & Interviews", "Career"),
-    TECHNICAL("Technical Learning", "Tech"),
-    BUSINESS("Business", "Business"),
-    FITNESS("Fitness", "Fitness"),
-    FINANCE("Finance", "Finance"),
-    FAMILY("Family", "Family"),
-    PLANNING("Planning & Review", "Planning"),
-    RECOVERY("Personal Care / Recovery", "Recovery"),
+/**
+ * Built-in category ids. Categories themselves are rows in the categories table (user-editable);
+ * these constants only name the defaults and map the v1 enum values onto them.
+ */
+object Cat {
+    const val CAREER = "career"
+    const val LEARNING = "learning"
+    const val FITNESS = "fitness"
+    const val HEALTH = "health"
+    const val BUSINESS = "business"
+    const val FINANCE = "finance"
+    const val FAMILY = "family"
+    const val RELATIONSHIPS = "relationships"
+    const val PROJECTS = "projects"
+    const val HOME = "home"
+    const val GROWTH = "growth"
+    const val PLANNING = "planning"
+
+    /** v1 stored an enum name in tasks.category. */
+    val LEGACY = mapOf(
+        "CAREER" to CAREER, "TECHNICAL" to LEARNING, "BUSINESS" to BUSINESS, "FITNESS" to FITNESS,
+        "FINANCE" to FINANCE, "FAMILY" to FAMILY, "PLANNING" to PLANNING, "RECOVERY" to HEALTH,
+    )
+
+    fun fromLegacy(value: String): String = LEGACY[value] ?: value
+
+    /** id, name, short name, icon key. Colours are assigned by position. */
+    val DEFAULTS: List<CategoryEntity> = listOf(
+        def(CAREER, "Career", "Career", "work"),
+        def(LEARNING, "Learning", "Learning", "school"),
+        def(FITNESS, "Fitness", "Fitness", "fitness"),
+        def(HEALTH, "Health & Wellness", "Health", "wellness"),
+        def(BUSINESS, "Business", "Business", "store"),
+        def(FINANCE, "Finance", "Finance", "savings"),
+        def(FAMILY, "Family", "Family", "family"),
+        def(RELATIONSHIPS, "Relationships", "People", "people"),
+        def(PROJECTS, "Personal Projects", "Projects", "build"),
+        def(HOME, "Home & Life Admin", "Home", "home"),
+        def(GROWTH, "Personal Growth", "Growth", "growth"),
+        def(PLANNING, "Planning & Review", "Planning", "planning"),
+    ).mapIndexed { i, c -> c.copy(colorIndex = i, sortOrder = i) }
+
+    private fun def(id: String, name: String, short: String, icon: String) =
+        CategoryEntity(id = id, name = name, shortName = short, iconKey = icon, builtIn = true)
+}
+
+object CategoryIcons {
+    val KEYS = listOf(
+        "work", "school", "fitness", "wellness", "store", "savings", "family", "people", "build", "home", "growth",
+        "planning", "code", "language", "music", "art", "book", "travel", "heart", "pets", "food", "sleep", "mind", "label",
+    )
 }
 
 enum class TimeSlot(val label: String, val shortLabel: String) {
@@ -30,7 +72,11 @@ enum class TimeSlot(val label: String, val shortLabel: String) {
 
 enum class EnergyLevel(val label: String) { LOW("Low effort"), MEDIUM("Medium effort"), HIGH("High effort") }
 
-enum class CompletionType { IDEAL, MINIMUM, SKIPPED }
+/** RESCHEDULED marks an occurrence that was moved to another day; it is neither done nor skipped. */
+enum class CompletionType { IDEAL, MINIMUM, SKIPPED, RESCHEDULED }
+
+/** Where a task or goal came from. Shown in the UI and used when revising AI plans. */
+enum class Source { SEED, MANUAL, AI }
 
 enum class SkipReason(val label: String) {
     TOO_TIRED("Too tired"),
@@ -68,14 +114,21 @@ object GoalIds {
     }
 }
 
-/** A manually recorded metric belonging to a goal. Values are always "current value as of date". */
+/**
+ * A manually recorded metric belonging to a goal. Values are always "current value as of date".
+ * Built-in goals use [Metrics.ALL]; AI-planned and user goals store their own list on the goal.
+ */
+@kotlinx.serialization.Serializable
 data class MetricDef(
     val key: String,
-    val goalId: String,
+    val goalId: String = "",
     val label: String,
-    val unit: String,
+    val unit: String = "",
     val isCurrency: Boolean = false,
     val decimals: Int = 0,
+    val baseline: Double? = null,
+    val target: Double? = null,
+    val higherIsBetter: Boolean = true,
 )
 
 object Metrics {
@@ -98,13 +151,19 @@ object Metrics {
     )
 
     fun byKey(key: String) = ALL.firstOrNull { it.key == key }
-    fun forGoal(goalId: String) = ALL.filter { it.goalId == goalId }
+
+    /** The goal's own metrics if it has any, otherwise the built-in ones for its id. */
+    fun forGoal(goal: Goal): List<MetricDef> =
+        goal.metrics.map { it.copy(goalId = goal.id) }.ifEmpty { ALL.filter { it.goalId == goal.id } }
+
+    fun def(goal: Goal?, key: String): MetricDef? =
+        goal?.let { g -> forGoal(g).firstOrNull { it.key == key } } ?: byKey(key)
 
     fun format(def: MetricDef?, value: Double): String {
         val num = if (def == null || def.decimals == 0) "%,d".format(value.toLong())
         else "%,.${def.decimals}f".format(value)
         return when {
-            def?.isCurrency == true -> "₹$num"
+            def?.isCurrency == true -> def.unit.ifBlank { "₹" } + num
             def?.unit.isNullOrBlank() -> num
             else -> "$num ${def!!.unit}"
         }

@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.levelup2027.data.CompletionType
-import app.levelup2027.data.GoalIds
 import app.levelup2027.domain.DateFmt
 import app.levelup2027.domain.ScheduleEngine
 import app.levelup2027.ui.AppViewModel
@@ -48,6 +47,8 @@ import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.Pill
 import app.levelup2027.ui.components.SkipDialog
 import app.levelup2027.ui.components.VersionBox
+import app.levelup2027.ui.LocalCatalog
+import app.levelup2027.ui.components.RescheduleDialog
 import app.levelup2027.ui.theme.color
 import java.time.LocalDate
 
@@ -73,6 +74,10 @@ fun TaskDetailSheet(vm: AppViewModel, taskId: String, requestedDate: LocalDate?,
     val canAct = scheduledThatDay && !date.isAfter(today)
     var note by remember(task.id, date) { mutableStateOf(completion?.notes ?: "") }
     var skipping by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
+    val catalog = LocalCatalog.current
+    val overrides by vm.overrides.collectAsState()
+    val preferMin = overrides.any { it.taskId == task.id && it.date == date && it.preferMinimum }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -94,8 +99,11 @@ fun TaskDetailSheet(vm: AppViewModel, taskId: String, requestedDate: LocalDate?,
             }
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Pill(task.category.label, task.category.color)
-                Pill("Goal: ${GoalIds.shortName(task.goalId)}", MaterialTheme.colorScheme.onSurfaceVariant)
+                val cat = catalog.category(task.category)
+                Pill(cat.name, cat.color)
+                if (task.goalId != null) Pill("Goal: ${catalog.goalName(task.goalId)}", MaterialTheme.colorScheme.onSurfaceVariant)
+                Pill(listOf("High", "Normal", "Low")[task.priority.coerceIn(1, 3) - 1] + " priority", MaterialTheme.colorScheme.onSurfaceVariant)
+                task.exactTime?.let { Pill("At $it", MaterialTheme.colorScheme.onSurfaceVariant) }
                 Pill(ScheduleEngine.describeSchedule(task), MaterialTheme.colorScheme.onSurfaceVariant)
                 Pill(task.energyLevel.label, MaterialTheme.colorScheme.onSurfaceVariant)
                 if (!task.enabled) Pill("Disabled", MaterialTheme.colorScheme.error)
@@ -139,6 +147,11 @@ fun TaskDetailSheet(vm: AppViewModel, taskId: String, requestedDate: LocalDate?,
                 ) { Text("Complete Minimum") }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = { skipping = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Skip Today") }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { moving = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Reschedule") }
+                TextButton(onClick = { vm.setPreferMinimum(task.id, date, !preferMin) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (preferMin) "Planned as minimum today · undo" else "Plan the minimum version for this day")
+                }
             } else {
                 Text(
                     when {
@@ -149,6 +162,15 @@ fun TaskDetailSheet(vm: AppViewModel, taskId: String, requestedDate: LocalDate?,
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (task.dependencyIds.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("Do after: " + task.dependencyIds.joinToString { id -> tasks?.firstOrNull { it.id == id }?.title ?: "a removed task" },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (task.originTaskId != null && task.originDate != null) {
+                Spacer(Modifier.height(12.dp))
+                Text("Moved here from ${DateFmt.medium(task.originDate)}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             task.supersedesTaskId?.let { base ->
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -156,6 +178,14 @@ fun TaskDetailSheet(vm: AppViewModel, taskId: String, requestedDate: LocalDate?,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+
+    if (moving) {
+        RescheduleDialog(task.title, date, today, onDismiss = { moving = false }) { to ->
+            vm.reschedule(task, date, to) { r -> nav.showMessage(r.fold({ "Moved to ${DateFmt.short(to)}" }, { "Couldn't move it: ${it.message}" })) }
+            moving = false
+            onDismiss()
         }
     }
 

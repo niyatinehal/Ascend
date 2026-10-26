@@ -45,6 +45,9 @@ interface TaskDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(tasks: List<Task>)
+
+    @Query("UPDATE tasks SET category = :to WHERE category = :from")
+    suspend fun reassignCategory(from: String, to: String)
 }
 
 @Dao
@@ -142,13 +145,90 @@ interface ReviewDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(list: List<WeeklyReview>)
 }
 
+@Dao
+interface CategoryDao {
+    @Query("SELECT * FROM categories ORDER BY sortOrder, name")
+    fun observeAll(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM categories ORDER BY sortOrder, name")
+    suspend fun getAll(): List<CategoryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(list: List<CategoryEntity>)
+
+    @Upsert
+    suspend fun upsert(c: CategoryEntity)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM categories") suspend fun deleteAll()
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(list: List<CategoryEntity>)
+}
+
+@Dao
+interface PlanDao {
+    @Query("SELECT * FROM weekly_outcomes ORDER BY weekStart DESC, sortOrder")
+    fun observeOutcomes(): Flow<List<WeeklyOutcome>>
+
+    @Query("SELECT * FROM weekly_outcomes")
+    suspend fun getOutcomes(): List<WeeklyOutcome>
+
+    @Upsert suspend fun upsertOutcomes(list: List<WeeklyOutcome>)
+    @Query("DELETE FROM weekly_outcomes") suspend fun deleteOutcomes()
+
+    @Query("SELECT * FROM occurrence_overrides")
+    fun observeOverrides(): Flow<List<OccurrenceOverride>>
+
+    @Query("SELECT * FROM occurrence_overrides")
+    suspend fun getOverrides(): List<OccurrenceOverride>
+
+    @Query("SELECT * FROM occurrence_overrides WHERE date = :date")
+    suspend fun overridesFor(date: LocalDate): List<OccurrenceOverride>
+
+    @Upsert suspend fun upsertOverride(o: OccurrenceOverride)
+    @Query("DELETE FROM occurrence_overrides WHERE taskId = :taskId AND date = :date") suspend fun deleteOverride(taskId: String, date: LocalDate)
+    @Query("DELETE FROM occurrence_overrides") suspend fun deleteOverrides()
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertOverrides(list: List<OccurrenceOverride>)
+
+    @Query("SELECT * FROM plan_drafts WHERE id = :id") suspend fun draft(id: String): PlanDraftRecord?
+    @Query("SELECT * FROM plan_drafts WHERE status = 'OPEN' AND kind = :kind ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun latestOpenDraft(kind: String): PlanDraftRecord?
+    @Upsert suspend fun upsertDraft(d: PlanDraftRecord)
+    @Query("DELETE FROM plan_drafts") suspend fun deleteDrafts()
+
+    @Query("SELECT * FROM change_log ORDER BY at DESC LIMIT :limit")
+    fun observeChangeLog(limit: Int = 50): Flow<List<ChangeLogEntry>>
+    @Query("SELECT * FROM change_log") suspend fun getChangeLog(): List<ChangeLogEntry>
+    @Insert suspend fun log(e: ChangeLogEntry)
+    @Query("DELETE FROM change_log") suspend fun deleteChangeLog()
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertChangeLog(list: List<ChangeLogEntry>)
+}
+
+@Dao
+interface AiUsageDao {
+    @Insert suspend fun insert(u: AiUsage)
+
+    @Query("SELECT * FROM ai_usage WHERE at >= :since ORDER BY at DESC")
+    fun observeSince(since: Long): Flow<List<AiUsage>>
+
+    @Query("SELECT * FROM ai_usage WHERE at >= :since")
+    suspend fun since(since: Long): List<AiUsage>
+
+    @Query("DELETE FROM ai_usage") suspend fun deleteAll()
+}
+
 /**
  * Schema version history is exported to app/schemas. When the schema changes, bump [version]
  * and add a Migration to [MIGRATIONS]; destructive fallback is intentionally not enabled.
  */
 @Database(
-    entities = [Task::class, Completion::class, Goal::class, Milestone::class, ProgressEntry::class, WeeklyReview::class],
-    version = 1,
+    entities = [
+        Task::class, Completion::class, Goal::class, Milestone::class, ProgressEntry::class, WeeklyReview::class,
+        CategoryEntity::class, WeeklyOutcome::class, OccurrenceOverride::class, AiUsage::class, PlanDraftRecord::class,
+        ChangeLogEntry::class,
+    ],
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -157,9 +237,18 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun completions(): CompletionDao
     abstract fun goals(): GoalDao
     abstract fun reviews(): ReviewDao
+    abstract fun categories(): CategoryDao
+    abstract fun plan(): PlanDao
+    abstract fun aiUsage(): AiUsageDao
 
     companion object {
-        val MIGRATIONS = arrayOf<androidx.room.migration.Migration>()
+        val MIGRATIONS = arrayOf<androidx.room.migration.Migration>(
+            object : androidx.room.migration.Migration(1, 2) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    Migration1to2.statements().forEach(db::execSQL)
+                }
+            },
+        )
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "levelup2027.db")
