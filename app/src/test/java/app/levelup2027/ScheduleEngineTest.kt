@@ -1,7 +1,7 @@
 package app.levelup2027
 
 import app.levelup2027.data.Campaign
-import app.levelup2027.data.Category
+import app.levelup2027.data.Cat
 import app.levelup2027.data.Completion
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.Task
@@ -25,7 +25,7 @@ fun task(
     rule: String? = null,
     date: LocalDate? = null,
     slot: TimeSlot = TimeSlot.EVENING,
-    category: Category = Category.TECHNICAL,
+    category: String = Cat.LEARNING,
     supersedes: String? = null,
     enabled: Boolean = true,
     activeFrom: LocalDate? = null,
@@ -64,8 +64,11 @@ class ScheduleEngineTest {
         assertFalse(ScheduleEngine.isScheduledOn(t, sun))
     }
 
-    @Test fun `recurring tasks respect campaign window and activeFrom`() {
-        val daily = task("d", rule = "DAILY")
+    @Test fun `recurring tasks respect their active window and are open-ended without one`() {
+        val open = task("d", rule = "DAILY")
+        assertTrue(ScheduleEngine.isScheduledOn(open, Campaign.START.minusDays(1)))
+        assertTrue(ScheduleEngine.isScheduledOn(open, Campaign.END.plusDays(400)))
+        val daily = task("d", rule = "DAILY").copy(activeFrom = Campaign.START, activeUntil = Campaign.END)
         assertFalse(ScheduleEngine.isScheduledOn(daily, Campaign.START.minusDays(1)))
         assertTrue(ScheduleEngine.isScheduledOn(daily, Campaign.START))
         assertTrue(ScheduleEngine.isScheduledOn(daily, Campaign.END))
@@ -93,9 +96,9 @@ class ScheduleEngineTest {
 
     @Test fun `disabled tasks and disabled categories are excluded`() {
         val a = task("a", rule = "DAILY", enabled = false)
-        val b = task("b", rule = "DAILY", category = Category.BUSINESS)
-        val c = task("c", rule = "DAILY", category = Category.FITNESS)
-        val ids = ScheduleEngine.tasksFor(mon, listOf(a, b, c), enabledCategories = setOf(Category.FITNESS)).map { it.id }
+        val b = task("b", rule = "DAILY", category = Cat.BUSINESS)
+        val c = task("c", rule = "DAILY", category = Cat.FITNESS)
+        val ids = ScheduleEngine.tasksFor(mon, listOf(a, b, c), hiddenCategories = setOf(Cat.BUSINESS)).map { it.id }
         assertEquals(listOf("c"), ids)
     }
 

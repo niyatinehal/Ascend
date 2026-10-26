@@ -50,11 +50,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import app.levelup2027.data.Category
+import app.levelup2027.data.Cat
 import app.levelup2027.data.Completion
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.Goal
 import app.levelup2027.data.GoalIds
+import app.levelup2027.data.GoalStatus
+import app.levelup2027.data.WeeklyOutcome
+import app.levelup2027.domain.Dates
+import app.levelup2027.ui.Catalog
+import app.levelup2027.ui.LocalCatalog
+import app.levelup2027.ui.LocalNav
 import app.levelup2027.data.MetricDef
 import app.levelup2027.data.Metrics
 import app.levelup2027.data.Milestone
@@ -74,13 +80,15 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-private fun goalColor(id: String): Color = when (id) {
-    GoalIds.CAREER -> Category.CAREER.color
-    GoalIds.FITNESS -> Category.FITNESS.color
-    GoalIds.TECH -> Category.TECHNICAL.color
-    GoalIds.FAMILY -> Category.FAMILY.color
-    else -> Category.BUSINESS.color
-}
+private fun goalColor(goal: Goal, catalog: Catalog): Color = catalog.category(
+    goal.categoryId ?: when (goal.id) {
+        GoalIds.CAREER -> Cat.CAREER
+        GoalIds.FITNESS -> Cat.FITNESS
+        GoalIds.TECH -> Cat.LEARNING
+        GoalIds.FAMILY -> Cat.FAMILY
+        else -> Cat.BUSINESS
+    },
+).color
 
 @Composable
 fun GoalsScreen(vm: AppViewModel) {
@@ -93,8 +101,12 @@ fun GoalsScreen(vm: AppViewModel) {
     var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
     var recording by remember { mutableStateOf<Pair<String, String?>?>(null) }
     var editingDate by remember { mutableStateOf<Goal?>(null) }
+    val outcomes by vm.outcomes.collectAsState()
+    val nav = LocalNav.current
+    val catalog = LocalCatalog.current
 
-    val latest = remember(progress) { Repository.latestValues(progress) }
+    // Latest value per metric, per goal (two goals may use the same metric key).
+    val latestByGoal = remember(progress) { progress.groupBy { it.goalId }.mapValues { (_, l) -> Repository.latestValues(l) } }
     val taskGoal = remember(tasks) { tasks.orEmpty().associate { it.id to it.goalId } }
     val xp = Xp.total(completions)
 
@@ -109,14 +121,31 @@ fun GoalsScreen(vm: AppViewModel) {
                 "Level ${Xp.level(xp)} · ${Xp.daysShowedUp(completions)} days showed up · ${completions.count { it.isDone }} tasks done",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = nav.openPlanBuilder, modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
+                    Text(if (goals.isEmpty()) "Build my plan" else "Add goals with AI")
+                }
+                OutlinedButton(onClick = nav.openAdjust, enabled = goals.isNotEmpty(), modifier = Modifier.weight(1f).heightIn(min = 44.dp)) { Text("Adjust my plan") }
+            }
         }
-        items(goals, key = { it.id }) { g ->
+        if (goals.isEmpty()) {
+            item {
+                Text("No goals yet. Describe what you want to work toward and AI will draft a plan for you to review, or add tasks yourself from the Tasks tab.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        items(goals.sortedBy { if (it.isActive) 0 else 1 }, key = { it.id }) { g ->
             val goalCompletions = completions.filter { taskGoal[it.taskId] == g.id }
             GoalCard(
                 goal = g,
                 milestones = milestones.filter { it.goalId == g.id },
-                latest = latest,
+                latest = latestByGoal[g.id].orEmpty(),
                 entries = progress.filter { it.goalId == g.id },
+                outcomes = outcomes.filter { it.goalId == g.id && it.weekStart == Dates.weekStart(today) },
+                color = goalColor(g, catalog),
+                onOutcome = { o, done -> vm.setOutcomeDone(o, done) },
+                onStatus = { st -> vm.updateGoal(g.copy(status = st)) },
                 linked = tasks.orEmpty().filter { it.goalId == g.id && it.enabled && !it.isOneTime },
                 goalCompletions = goalCompletions,
                 today = today,
@@ -138,10 +167,11 @@ fun GoalsScreen(vm: AppViewModel) {
     }
 
     recording?.let { (goalId, metric) ->
+        val goal = goals.firstOrNull { it.id == goalId } ?: return@let
         RecordDialog(
-            defs = Metrics.forGoal(goalId),
+            defs = Metrics.forGoal(goal),
             initial = metric,
-            latest = latest,
+            latest = latestByGoal[goalId].orEmpty(),
             onDismiss = { recording = null },
             onSave = { key, value, note ->
                 vm.addProgress(goalId, key, value, note)
@@ -149,7 +179,7 @@ fun GoalsScreen(vm: AppViewModel) {
             },
         )
     }
-    editingDate?.let { g -> TargetDateDialog(g, onDismiss = { editingDate = null }) { vm.updateGoal(g.copy(targetDate = it)); editingDate = null } }
+    editingDate?.let { g -> TargetDateDialog(g, onDismiss = { editingDate = null }) { vm.updateGoal(g.copy(targetDate = it, deadlineAssumed = false)); editingDate = null } }
 }
 
 @Composable
@@ -158,6 +188,10 @@ private fun GoalCard(
     milestones: List<Milestone>,
     latest: Map<String, ProgressEntry>,
     entries: List<ProgressEntry>,
+    outcomes: List<WeeklyOutcome>,
+    color: Color,
+    onOutcome: (WeeklyOutcome, Boolean) -> Unit,
+    onStatus: (String) -> Unit,
     linked: List<Task>,
     goalCompletions: List<Completion>,
     today: LocalDate,
@@ -168,8 +202,8 @@ private fun GoalCard(
     onDeleteEntry: (ProgressEntry) -> Unit,
     onEditDate: () -> Unit,
 ) {
-    val color = goalColor(goal.id)
     val next = milestones.firstOrNull { !it.done }
+    val defs = Metrics.forGoal(goal)
     fun v(k: String) = latest[k]?.value
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -179,13 +213,15 @@ private fun GoalCard(
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Overline(GoalIds.shortName(goal.id), color = color)
+                    Overline(goal.displayName, color = color)
                     Text(goal.title, style = MaterialTheme.typography.titleMedium)
                 }
+                if (!goal.isActive) Pill(goal.status.replaceFirstChar { it.uppercase() }, MaterialTheme.colorScheme.onSurfaceVariant)
                 Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (expanded) "Collapse" else "Expand")
             }
             Spacer(Modifier.height(6.dp))
-            Text("Target: ${goal.target}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Target: ${goal.target}" + " · by ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed)" else "",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Now: ${goal.currentProgress}", style = MaterialTheme.typography.bodyMedium)
 
             // Measurable progress bars, only where a real numeric target exists.
@@ -223,6 +259,38 @@ private fun GoalCard(
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                else -> {
+                    // Goals with their own metrics: a bar for each metric that has a numeric target.
+                    defs.filter { it.target != null }.take(3).forEach { d ->
+                        val now = v(d.key) ?: d.baseline
+                        val base = d.baseline ?: 0.0
+                        val fraction = when {
+                            now == null -> 0f
+                            d.higherIsBetter -> if (d.target!! == base) 1f else ((now - base) / (d.target - base)).toFloat()
+                            else -> if (base == d.target!!) 1f else ((base - now) / (base - d.target)).toFloat()
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(d.label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(96.dp), maxLines = 1)
+                            ProgressLine(fraction, Modifier.weight(1f).height(6.dp), color)
+                            Spacer(Modifier.width(8.dp))
+                            Text((now?.let { Metrics.format(d, it) } ?: "not recorded") + " / " + Metrics.format(d, d.target!!),
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    val done = goalCompletions.count { it.isDone }
+                    if (done > 0) Text("$done tasks done for this goal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (outcomes.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Overline("This week")
+                outcomes.forEach { o ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = o.done, onCheckedChange = { onOutcome(o, it) })
+                        Text(o.title, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
             next?.let {
                 Spacer(Modifier.height(8.dp))
@@ -245,8 +313,18 @@ private fun GoalCard(
                         )
                     }
 
+                    if (goal.assumptions.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("Assumed: ${goal.assumptions}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.height(12.dp)); Overline("Status")
+                    ChipChoice(listOf(GoalStatus.ACTIVE, GoalStatus.PAUSED, GoalStatus.DONE, GoalStatus.DROPPED), goal.status, { it.replaceFirstChar { c -> c.uppercase() } }, onStatus)
+                    Text("Paused or dropped goals keep their history; their tasks are lowered in priority but not deleted.",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
                     Spacer(Modifier.height(12.dp)); Overline("Record progress")
-                    val defs = Metrics.forGoal(goal.id)
+                    if (defs.isEmpty()) Text("This goal has no numeric measures; it's tracked by the tasks you complete.", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     defs.forEach { d ->
                         val e = latest[d.key]
                         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -260,8 +338,8 @@ private fun GoalCard(
                             TextButton(onClick = { onRecord(d.key) }) { Text("Update") }
                         }
                     }
-                    if (goal.id == GoalIds.FAMILY) {
-                        OutlinedButton(onClick = onEditDate, modifier = Modifier.heightIn(min = 44.dp)) { Text("Target date: ${DateFmt.medium(goal.targetDate)}") }
+                    OutlinedButton(onClick = onEditDate, modifier = Modifier.heightIn(min = 44.dp)) {
+                        Text("Target date: ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed · tap to set)" else "")
                     }
 
                     Spacer(Modifier.height(12.dp)); Overline("Timeline")
@@ -294,7 +372,7 @@ private fun GoalCard(
                         entries.take(8).forEach { e ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "${DateFmt.short(e.date)} · ${Metrics.byKey(e.metric)?.label ?: e.metric}: ${Metrics.format(Metrics.byKey(e.metric), e.value)}" +
+                                    "${DateFmt.short(e.date)} · ${Metrics.def(goal, e.metric)?.label ?: e.metric}: ${Metrics.format(Metrics.def(goal, e.metric), e.value)}" +
                                         (if (e.isEstimate) " (estimate)" else "") + (if (e.notes.isNotBlank()) " · ${e.notes}" else ""),
                                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
                                 )
@@ -305,7 +383,7 @@ private fun GoalCard(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = { onRecord(null) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Record progress") }
+                    if (defs.isNotEmpty()) FilledTonalButton(onClick = { onRecord(null) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Record progress") }
                 }
             }
         }
@@ -346,7 +424,7 @@ private fun RecordDialog(
                 ChipChoice(defs.map { it.key }, key, { k -> defs.first { it.key == k }.label }) { key = it }
                 OutlinedTextField(
                     value, { value = it }, singleLine = true,
-                    label = { Text(def.label + if (def.isCurrency) " (₹)" else if (def.unit.isNotBlank()) " (${def.unit})" else "") },
+                    label = { Text(def.label + if (def.isCurrency) " (${def.unit.ifBlank { "₹" }})" else if (def.unit.isNotBlank()) " (${def.unit})" else "") },
                     supportingText = { Text("Enter the current total, recorded for today.") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = value.isNotBlank() && (parsed == null || parsed < 0),

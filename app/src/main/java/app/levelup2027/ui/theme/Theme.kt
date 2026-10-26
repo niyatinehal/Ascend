@@ -2,18 +2,34 @@ package app.levelup2027.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.FamilyRestroom
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.NightsStay
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Pets
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.SelfImprovement
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material.icons.outlined.WorkOutline
+import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -24,7 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import app.levelup2027.data.Category
+import app.levelup2027.data.CategoryEntity
 import app.levelup2027.data.ThemeChoice
 import app.levelup2027.data.TimeSlot
 
@@ -41,29 +57,45 @@ object Palette {
     val TextMuted = Color(0xFFA3A9B7)
 }
 
-val Category.color: Color
-    get() = when (this) {
-        Category.CAREER -> Color(0xFF7FA7E8)
-        Category.TECHNICAL -> Color(0xFFA58BE0)
-        Category.BUSINESS -> Color(0xFFE3A15A)
-        Category.FITNESS -> Color(0xFFE07A7A)
-        Category.FINANCE -> Color(0xFF6CC59A)
-        Category.FAMILY -> Color(0xFFE58FB8)
-        Category.PLANNING -> Color(0xFF9AA4B2)
-        Category.RECOVERY -> Color(0xFF6EC3D6)
-    }
+/** Category colours by palette position; chosen to stay distinct on both dark and light backgrounds. */
+val CategoryPalette = listOf(
+    Color(0xFF7FA7E8), Color(0xFFA58BE0), Color(0xFFE07A7A), Color(0xFF6EC3D6),
+    Color(0xFFE3A15A), Color(0xFF6CC59A), Color(0xFFE58FB8), Color(0xFFD9C26A),
+    Color(0xFF8FB3A0), Color(0xFFB79C86), Color(0xFF9BC46A), Color(0xFF9AA4B2),
+)
 
-val Category.icon: ImageVector
-    get() = when (this) {
-        Category.CAREER -> Icons.Outlined.Work
-        Category.TECHNICAL -> Icons.Outlined.Code
-        Category.BUSINESS -> Icons.Outlined.Storefront
-        Category.FITNESS -> Icons.Outlined.FitnessCenter
-        Category.FINANCE -> Icons.Outlined.Savings
-        Category.FAMILY -> Icons.Outlined.FamilyRestroom
-        Category.PLANNING -> Icons.Outlined.EventNote
-        Category.RECOVERY -> Icons.Outlined.SelfImprovement
-    }
+fun categoryColor(index: Int): Color = CategoryPalette[Math.floorMod(index, CategoryPalette.size)]
+
+/** Keys match [app.levelup2027.data.CategoryIcons.KEYS]; unknown keys fall back to a label icon. */
+fun categoryIcon(key: String): ImageVector = when (key) {
+    "work" -> Icons.Outlined.Work
+    "school" -> Icons.Outlined.School
+    "fitness" -> Icons.Outlined.FitnessCenter
+    "wellness" -> Icons.Outlined.SelfImprovement
+    "store" -> Icons.Outlined.Storefront
+    "savings" -> Icons.Outlined.Savings
+    "family" -> Icons.Outlined.FamilyRestroom
+    "people" -> Icons.Outlined.People
+    "build" -> Icons.Outlined.Build
+    "home" -> Icons.Outlined.Home
+    "growth" -> Icons.Outlined.TrendingUp
+    "planning" -> Icons.Outlined.EventNote
+    "code" -> Icons.Outlined.Code
+    "language" -> Icons.Outlined.Translate
+    "music" -> Icons.Outlined.MusicNote
+    "art" -> Icons.Outlined.Brush
+    "book" -> Icons.Outlined.MenuBook
+    "travel" -> Icons.Outlined.Flight
+    "heart" -> Icons.Outlined.FavoriteBorder
+    "pets" -> Icons.Outlined.Pets
+    "food" -> Icons.Outlined.Restaurant
+    "sleep" -> Icons.Outlined.Bedtime
+    "mind" -> Icons.Outlined.Psychology
+    else -> Icons.Outlined.Label
+}
+
+val CategoryEntity.color: Color get() = categoryColor(colorIndex)
+val CategoryEntity.icon: ImageVector get() = categoryIcon(iconKey)
 
 val TimeSlot.icon: ImageVector
     get() = when (this) {

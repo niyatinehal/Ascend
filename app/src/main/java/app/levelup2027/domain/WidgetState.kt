@@ -1,6 +1,5 @@
 package app.levelup2027.domain
 
-import app.levelup2027.data.Category
 import app.levelup2027.data.Completion
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.Task
@@ -13,7 +12,8 @@ data class WidgetConfig(
     val slot: TimeSlot? = null,
     val showCompleted: Boolean = false,
     val mode: WidgetMode = WidgetMode.IDEAL,
-    val categories: Set<Category> = Category.entries.toSet(),
+    /** Empty means every enabled category. */
+    val categories: Set<String> = emptySet(),
 )
 
 data class WidgetItem(
@@ -22,9 +22,12 @@ data class WidgetItem(
     val title: String,
     val line: String,
     val minutes: Int,
-    val category: Category,
+    val category: String,
     val slot: TimeSlot,
     val completionType: CompletionType?,
+    /** True when this row shows (and a tap completes) the minimum version. */
+    val useMinimum: Boolean = false,
+    val colorIndex: Int = 0,
 ) {
     val done get() = completionType == CompletionType.IDEAL || completionType == CompletionType.MINIMUM
 }
@@ -44,25 +47,32 @@ object WidgetStateBuilder {
         date: LocalDate,
         tasks: List<Task>,
         completions: List<Completion>,
-        appCategories: Set<Category>,
+        hiddenCategories: Set<String>,
         config: WidgetConfig,
         lowEnergy: Boolean,
+        preferMinimum: Set<String> = emptySet(),
+        categoryColors: Map<String, Int> = emptyMap(),
     ): WidgetState {
-        val cats = appCategories intersect config.categories
-        val occ = ScheduleEngine.occurrencesFor(date, tasks, completions, cats)
+        val occ = ScheduleEngine.occurrencesFor(date, tasks, completions, hiddenCategories)
             .filter { config.slot == null || it.task.timeSlot == config.slot }
+            .filter { config.categories.isEmpty() || it.task.category in config.categories }
         val progress = DailyProgress.of(occ)
         val useMinimum = lowEnergy || config.mode == WidgetMode.MINIMUM
-        fun item(o: Occurrence) = WidgetItem(
-            taskId = o.task.id,
-            date = o.date,
-            title = o.task.title,
-            line = firstLine(if (useMinimum) o.task.minimumDescription else o.task.idealDescription),
-            minutes = if (useMinimum) o.task.estimatedMinimumMinutes else o.task.estimatedIdealMinutes,
-            category = o.task.category,
-            slot = o.task.timeSlot,
-            completionType = o.completion?.completionType,
-        )
+        fun item(o: Occurrence): WidgetItem {
+            val min = useMinimum || o.task.id in preferMinimum
+            return WidgetItem(
+                taskId = o.task.id,
+                date = o.date,
+                title = o.task.title,
+                line = firstLine(if (min) o.task.minimumDescription else o.task.idealDescription),
+                minutes = if (min) o.task.estimatedMinimumMinutes else o.task.estimatedIdealMinutes,
+                category = o.task.category,
+                slot = o.task.timeSlot,
+                completionType = o.completion?.completionType,
+                useMinimum = min,
+                colorIndex = categoryColors[o.task.category] ?: 0,
+            )
+        }
         val open = occ.filter { it.isOpen }.map(::item)
         val closed = if (config.showCompleted) occ.filter { it.isDone }.map(::item) else emptyList()
         return WidgetState(date, progress.done, progress.scheduled, open.size, open + closed, config, lowEnergy)

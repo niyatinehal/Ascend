@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -49,25 +50,28 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.levelup2027.data.Category
+import app.levelup2027.data.CategoryEntity
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.DefaultMode
-import app.levelup2027.data.GoalIds
 import app.levelup2027.data.SkipReason
 import app.levelup2027.domain.Occurrence
+import app.levelup2027.ui.LocalCatalog
 import app.levelup2027.ui.theme.OverlineStyle
 import app.levelup2027.ui.theme.color
 import app.levelup2027.ui.theme.icon
 
 @Composable
-fun CategoryIcon(category: Category, size: Int = 32) {
+fun CategoryIcon(category: CategoryEntity, size: Int = 32) {
     Box(
         modifier = Modifier.size(size.dp).clip(CircleShape).background(category.color.copy(alpha = 0.16f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(category.icon, contentDescription = category.label, tint = category.color, modifier = Modifier.size((size * 0.56f).dp))
+        Icon(category.icon, contentDescription = category.name, tint = category.color, modifier = Modifier.size((size * 0.56f).dp))
     }
 }
+
+@Composable
+fun CategoryIcon(categoryId: String, size: Int = 32) = CategoryIcon(LocalCatalog.current.category(categoryId), size)
 
 @Composable
 fun Overline(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
@@ -94,6 +98,7 @@ fun CompletionBadge(type: CompletionType, reason: SkipReason?) {
         CompletionType.IDEAL -> Pill("Ideal ✓", MaterialTheme.colorScheme.primary)
         CompletionType.MINIMUM -> Pill("Minimum ✓", MaterialTheme.colorScheme.secondary)
         CompletionType.SKIPPED -> Pill("Skipped" + (reason?.let { " · ${it.label}" } ?: ""), MaterialTheme.colorScheme.onSurfaceVariant)
+        CompletionType.RESCHEDULED -> Pill("Moved", MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -125,9 +130,11 @@ fun TaskCard(
     onComplete: (CompletionType) -> Unit,
     onSkip: () -> Unit,
     onUndo: () -> Unit,
+    onReschedule: (() -> Unit)? = null,
 ) {
     val t = occ.task
     val c = occ.completion
+    val catalog = LocalCatalog.current
     Card(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -147,7 +154,9 @@ fun TaskCard(
                     )
                     Text(
                         buildString {
-                            append(t.category.shortLabel); append(" · "); append(GoalIds.shortName(t.goalId))
+                            append(catalog.category(t.category).shortName)
+                            if (t.goalId != null) { append(" · "); append(catalog.goalName(t.goalId)) }
+                            if (t.exactTime != null) { append(" · "); append(t.exactTime) }
                             if (showDate) { append(" · "); append(app.levelup2027.domain.DateFmt.short(occ.date)) }
                         },
                         style = MaterialTheme.typography.labelSmall,
@@ -203,6 +212,11 @@ fun TaskCard(
                         }
                     }
                     Spacer(Modifier.weight(1f))
+                    if (onReschedule != null) {
+                        IconButton(onClick = onReschedule, modifier = Modifier.semantics { contentDescription = "Move ${t.title} to another day" }) {
+                            Icon(Icons.Outlined.EventRepeat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                     TextButton(onClick = onSkip, modifier = Modifier.heightIn(min = 40.dp)) {
                         Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -292,4 +306,53 @@ fun VersionBox(label: String, body: String, minutes: Int, color: Color) {
         Spacer(Modifier.size(4.dp))
         Text(body, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+/** Move one occurrence to another day. Quick picks for the next few days, or any date up to 60 days out. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun RescheduleDialog(title: String, from: java.time.LocalDate, today: java.time.LocalDate, onDismiss: () -> Unit, onPick: (java.time.LocalDate) -> Unit) {
+    var custom by remember { mutableStateOf(false) }
+    val options = (0L..6L).map { today.plusDays(it) }.filter { it != from }.take(5)
+    if (custom) {
+        val zone = java.time.ZoneOffset.UTC
+        val state = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = options.first().atStartOfDay(zone).toInstant().toEpochMilli(),
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val d = java.time.Instant.ofEpochMilli(utcTimeMillis).atZone(zone).toLocalDate()
+                    return !d.isBefore(today) && !d.isAfter(today.plusDays(60)) && d != from
+                }
+            },
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { onPick(java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate()) }
+                }) { Text("Move") }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        ) { androidx.compose.material3.DatePicker(state) }
+        return
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move to another day") },
+        text = {
+            Column {
+                Text("\"$title\" will be marked as moved on ${app.levelup2027.domain.DateFmt.short(from)} and appear on the day you pick. Nothing else changes.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.size(8.dp))
+                options.forEach { d ->
+                    TextButton(onClick = { onPick(d) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (d == today) "Today" else if (d == today.plusDays(1)) "Tomorrow" else app.levelup2027.domain.DateFmt.widget(d))
+                    }
+                }
+                TextButton(onClick = { custom = true }, modifier = Modifier.fillMaxWidth()) { Text("Pick a date…") }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

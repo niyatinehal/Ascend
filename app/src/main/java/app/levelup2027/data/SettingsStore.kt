@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
@@ -24,16 +25,45 @@ data class WidgetSettings(
     val slot: TimeSlot? = null,
     val showCompleted: Boolean = false,
     val mode: WidgetMode = WidgetMode.IDEAL,
-    val categories: Set<Category> = Category.entries.toSet(),
+    /** Category ids shown on the widget; empty means all enabled categories. */
+    val categories: Set<String> = emptySet(),
 ) {
     fun toConfig() = WidgetConfig(slot, showCompleted, mode, categories)
 }
+
+/** Minutes the user can realistically spend on their plan per day. Null means "not set". */
+@Serializable
+data class Capacity(val weekdayMinutes: Int? = null, val weekendMinutes: Int? = null) {
+    fun forDate(date: LocalDate): Int? =
+        if (date.dayOfWeek.value >= 6) weekendMinutes ?: weekdayMinutes else weekdayMinutes ?: weekendMinutes
+    val isSet: Boolean get() = weekdayMinutes != null || weekendMinutes != null
+}
+
+enum class AiMode(val label: String) {
+    SERVER("Ascend AI server"),
+    OWN_KEY("My own Anthropic API key"),
+    OFF("Off"),
+}
+
+@Serializable
+data class AiSettings(
+    val mode: AiMode = AiMode.SERVER,
+    /** Overrides the server URL built into the app (BuildConfig.AI_SERVER_URL). */
+    val serverUrl: String = "",
+    /** The user has read what is sent to the AI provider and agreed. Asked once, before the first AI call. */
+    val consentGiven: Boolean = false,
+    /** Apply small, explicitly requested changes (move one occurrence, lighter day) without a review step. */
+    val autoApplySimple: Boolean = false,
+    /** Local cap for own-key mode so a bug or loop can't run up the user's bill. */
+    val monthlyRequestLimit: Int = 60,
+)
 
 @Serializable
 data class AppSettings(
     val theme: ThemeChoice = ThemeChoice.DARK,
     val defaultMode: DefaultMode = DefaultMode.DECIDE,
-    val enabledCategories: Set<Category> = Category.entries.toSet(),
+    /** v1 kept enabled categories here (as enum names); now they live on the category rows. */
+    @SerialName("enabledCategories") val legacyEnabledCategories: Set<String>? = null,
     val morningReminder: Reminder = Reminder(true, 7, 0),
     val workReminder: Reminder = Reminder(true, 12, 30),
     val eveningReminder: Reminder = Reminder(true, 20, 30),
@@ -45,8 +75,38 @@ data class AppSettings(
     /** Notification permission is offered after the first completion, not on first launch. */
     val notificationPromptEligible: Boolean = false,
     val notificationPromptDismissed: Boolean = false,
+    /** 0 = written by v1 (or never written); see [migrated]. */
+    val settingsVersion: Int = 0,
+    val onboardingDone: Boolean = false,
+    @Serializable(with = LocalDateSerializer::class) val planStartDate: LocalDate? = null,
+    val capacity: Capacity = Capacity(),
+    val ai: AiSettings = AiSettings(),
+    /** Structured context from the last "Build my plan" conversation (work hours, preferences...). */
+    val userContextJson: String = "",
+    val widgetHintDismissed: Boolean = false,
 ) {
     fun isLowEnergy(today: LocalDate) = lowEnergyDate == today
+
+    /**
+     * Upgrades settings written by v1. Pure so it can be tested; disabling legacy categories on the
+     * category rows is done by the repository from [legacyDisabledCategoryIds].
+     */
+    fun migrated(): AppSettings {
+        if (settingsVersion >= CURRENT_VERSION) return this
+        val widgetCats = widget.categories.map(Cat::fromLegacy).toSet()
+        val allLegacy = Cat.LEGACY.values.toSet()
+        return copy(
+            settingsVersion = CURRENT_VERSION,
+            widget = widget.copy(categories = if (widgetCats.containsAll(allLegacy)) emptySet() else widgetCats),
+            onboardingDone = onboardingDone || seedVersion > 0,
+            planStartDate = planStartDate ?: if (seedVersion > 0) Campaign.START else null,
+        )
+    }
+
+    val legacyDisabledCategoryIds: Set<String>
+        get() = legacyEnabledCategories?.let { enabled -> (Cat.LEGACY.keys - enabled).map(Cat::fromLegacy).toSet() } ?: emptySet()
+
+    companion object { const val CURRENT_VERSION = 2 }
 }
 
 interface SettingsSource {

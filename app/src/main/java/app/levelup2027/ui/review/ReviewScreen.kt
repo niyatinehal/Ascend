@@ -41,7 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.levelup2027.data.Campaign
+import app.levelup2027.ui.LocalCatalog
 import app.levelup2027.data.Repository
 import app.levelup2027.data.WeeklyReview
 import app.levelup2027.domain.DateFmt
@@ -64,10 +64,12 @@ fun ReviewScreen(vm: AppViewModel) {
     val nav = LocalNav.current
 
     val currentWeek = Dates.weekStart(today)
-    val firstWeek = Dates.weekStart(Campaign.START)
+    val hidden by vm.hiddenCategories.collectAsState()
+    val catalog = LocalCatalog.current
+    val firstWeek = Dates.weekStart(settings?.planStartDate ?: completions.minOfOrNull { it.scheduledDate } ?: today)
     var weekStart by rememberSaveable { mutableStateOf(currentWeek) }
-    val stats = remember(weekStart, today, tasks, completions, settings) {
-        WeeklyStatsCalculator.compute(weekStart, today, tasks.orEmpty(), completions, settings?.enabledCategories)
+    val stats = remember(weekStart, today, tasks, completions, hidden) {
+        WeeklyStatsCalculator.compute(weekStart, today, tasks.orEmpty(), completions, hidden)
     }
     val saved = reviews.firstOrNull { it.weekStartDate == weekStart }
     var wins by remember(weekStart, saved) { mutableStateOf(saved?.wins ?: "") }
@@ -127,15 +129,15 @@ fun ReviewScreen(vm: AppViewModel) {
         }
         item {
             SectionCard {
-                Stat("Gym sessions", "${stats.workouts} of ${stats.workoutsPlanned} planned")
-                Stat("Technical-learning sessions", "${stats.techSessions} of ${stats.techPlanned}")
-                Stat("Business actions", "${stats.businessActions} of ${stats.businessPlanned}" +
-                    (latest["conversations"]?.let { " · ${it.value.toInt()} conversations total" } ?: "") +
-                    (latest["mrr"]?.let { " · actual MRR ₹%,d".format(it.value.toLong()) } ?: ""))
+                if (stats.workoutsPlanned > 0) Stat("Workouts", "${stats.workouts} of ${stats.workoutsPlanned} planned")
+                stats.byGoal.filter { it.id != null }.forEach { g -> Stat(catalog.goalName(g.id), "${g.done} of ${g.planned} tasks done") }
+                stats.byCategory.forEach { c -> Stat(catalog.category(c.id ?: "").name, "${c.done} of ${c.planned}") }
+                // The example plan's money goals keep their specific lines.
+                latest["mrr"]?.let { Stat("Actual MRR", "₹%,d".format(it.value.toLong())) }
                 val fund = latest["fund_balance"]?.value
                 val fundBefore = beforeWeek["fund_balance"]?.value
                 val target = latest["fund_target"]?.value
-                Stat(
+                if (fund != null || target != null) Stat(
                     "Phone fund",
                     when {
                         fund == null -> "Not recorded yet (log it in Goals)"
@@ -143,7 +145,6 @@ fun ReviewScreen(vm: AppViewModel) {
                             (fundBefore?.let { val d = fund - it; if (d != 0.0) " · %s₹%,d this week".format(if (d > 0) "+" else "−", kotlin.math.abs(d).toLong()) else "" } ?: "")
                     },
                 )
-                Stat("Finance check-ins", "${stats.financeActions}")
             }
         }
         if (stats.frequentlySkipped.isNotEmpty()) {

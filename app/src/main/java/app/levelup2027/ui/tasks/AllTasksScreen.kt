@@ -51,10 +51,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.levelup2027.data.Category
 import app.levelup2027.data.Completion
 import app.levelup2027.data.CompletionType
-import app.levelup2027.data.GoalIds
+import app.levelup2027.ui.LocalCatalog
 import app.levelup2027.data.Task
 import app.levelup2027.data.TimeSlot
 import app.levelup2027.domain.DateFmt
@@ -98,12 +97,15 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
     val tasks by vm.tasks.collectAsState()
     val completions by vm.completions.collectAsState()
     val today by vm.today.collectAsState()
+    val categories by vm.categories.collectAsState()
+    val goals by vm.goals.collectAsState()
+    val catalog = LocalCatalog.current
     val nav = LocalNav.current
 
     var weekView by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(weekPlanRequested) { if (weekPlanRequested) { weekView = true; onWeekPlanShown() } }
     var query by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf<Category?>(null) }
+    var category by rememberSaveable { mutableStateOf<String?>(null) }
     var slot by rememberSaveable { mutableStateOf<TimeSlot?>(null) }
     var goal by rememberSaveable { mutableStateOf<String?>(null) }
     var state by rememberSaveable { mutableStateOf(StateFilter.ANY) }
@@ -144,16 +146,16 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
                             }
                         }
                         item {
-                            DropdownChip(category?.shortLabel ?: "Category", category != null,
-                                listOf<Pair<String, Category?>>("All categories" to null) + Category.entries.map { it.label to it }) { category = it }
+                            DropdownChip(category?.let { catalog.category(it).shortName } ?: "Category", category != null,
+                                listOf<Pair<String, String?>>("All categories" to null) + categories.map { it.name to it.id }) { category = it }
                         }
                         item {
                             DropdownChip(slot?.shortLabel ?: "Time", slot != null,
                                 listOf<Pair<String, TimeSlot?>>("Any time" to null) + TimeSlot.entries.map { it.label to it }) { slot = it }
                         }
                         item {
-                            DropdownChip(goal?.let { GoalIds.shortName(it) } ?: "Goal", goal != null,
-                                listOf<Pair<String, String?>>("All goals" to null) + GoalIds.ALL.map { GoalIds.shortName(it) to it }) { goal = it }
+                            DropdownChip(goal?.let { catalog.goalName(it) } ?: "Goal", goal != null,
+                                listOf<Pair<String, String?>>("All goals" to null) + goals.map { it.displayName to it.id }) { goal = it }
                         }
                         item {
                             DropdownChip(if (state == StateFilter.ANY) "State" else state.label, state != StateFilter.ANY,
@@ -228,6 +230,7 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
 
 @Composable
 private fun TaskRow(t: Task, date: LocalDate?, c: Completion?, onClick: () -> Unit) {
+    val catalog = LocalCatalog.current
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
@@ -241,7 +244,7 @@ private fun TaskRow(t: Task, date: LocalDate?, c: Completion?, onClick: () -> Un
                 Text(t.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (t.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    "${t.timeSlot.shortLabel} · ${ScheduleEngine.describeSchedule(t)} · ${GoalIds.shortName(t.goalId)}",
+                    listOfNotNull(t.timeSlot.shortLabel, ScheduleEngine.describeSchedule(t), t.goalId?.let(catalog::goalName)).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                 )
             }

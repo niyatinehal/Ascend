@@ -48,7 +48,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.levelup2027.BuildConfig
 import app.levelup2027.data.AppSettings
 import app.levelup2027.data.BackupFile
-import app.levelup2027.data.Category
+import app.levelup2027.data.BackupManager
+import app.levelup2027.data.CategoryEntity
+import app.levelup2027.data.CategoryIcons
 import app.levelup2027.data.DefaultMode
 import app.levelup2027.data.Reminder
 import app.levelup2027.data.Repository
@@ -63,6 +65,9 @@ import app.levelup2027.ui.LocalNav
 import app.levelup2027.ui.Tab
 import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.SectionCard
+import app.levelup2027.ui.plan.AiSettingsSection
+import app.levelup2027.ui.plan.CapacityDialog
+import app.levelup2027.ui.theme.categoryIcon
 import app.levelup2027.ui.tasks.ChipChoice
 import app.levelup2027.ui.tasks.SwitchRow
 import app.levelup2027.ui.theme.color
@@ -74,7 +79,7 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun WidgetSettingsEditor(value: WidgetSettings, onChange: (WidgetSettings) -> Unit) {
+fun WidgetSettingsEditor(value: WidgetSettings, categories: List<CategoryEntity>, onChange: (WidgetSettings) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Overline("Time slot shown")
         ChipChoice(listOf<TimeSlot?>(null) + TimeSlot.entries, value.slot, { it?.label ?: "All of today" }) { onChange(value.copy(slot = it)) }
@@ -86,16 +91,14 @@ fun WidgetSettingsEditor(value: WidgetSettings, onChange: (WidgetSettings) -> Un
         )
         SwitchRow("Show completed tasks", "Off: only what's left today", value.showCompleted) { onChange(value.copy(showCompleted = it)) }
         Overline("Categories shown")
+        Text("None selected means all categories.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Category.entries.forEach { c ->
-                val on = c in value.categories
+            categories.filter { it.enabled }.forEach { c ->
+                val on = c.id in value.categories
                 FilterChip(
                     selected = on,
-                    onClick = {
-                        val next = if (on) value.categories - c else value.categories + c
-                        if (next.isNotEmpty()) onChange(value.copy(categories = next))
-                    },
-                    label = { Text(c.shortLabel) },
+                    onClick = { onChange(value.copy(categories = if (on) value.categories - c.id else value.categories + c.id)) },
+                    label = { Text(c.shortName) },
                     leadingIcon = { Icon(c.icon, null, Modifier.size(16.dp), tint = c.color) },
                     modifier = Modifier.heightIn(min = 40.dp),
                 )
@@ -109,6 +112,12 @@ fun WidgetSettingsEditor(value: WidgetSettings, onChange: (WidgetSettings) -> Un
 fun SettingsScreen(vm: AppViewModel) {
     val settingsState by vm.settings.collectAsState()
     val s = settingsState ?: return
+    val categories by vm.categories.collectAsState()
+    val changeLog by vm.changeLog.collectAsState()
+    var editingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
+    var newCategory by remember { mutableStateOf(false) }
+    var editingCapacity by remember { mutableStateOf(false) }
+    var confirmErase by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
@@ -143,9 +152,7 @@ fun SettingsScreen(vm: AppViewModel) {
         scope.launch {
             val result = runCatching {
                 val text = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() } }
-                val parsed = SettingsJson.decodeFromString(BackupFile.serializer(), text)
-                require(parsed.format == BackupFile.FORMAT) { "Not a Ascend backup" }
-                text to parsed
+                text to BackupManager.parse(text)
             }
             result.onSuccess { pendingRestore = it }.onFailure { nav.showMessage("Couldn't read that file: ${it.message?.take(80)}") }
         }
@@ -159,6 +166,20 @@ fun SettingsScreen(vm: AppViewModel) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { Text("Settings", style = MaterialTheme.typography.headlineSmall) }
+
+        item { SectionCard { AiSettingsSection(vm) } }
+
+        item {
+            SectionCard {
+                Overline("Daily time budget")
+                Text(
+                    if (!s.capacity.isSet) "Not set. Set one so Today shows what fits and puts the rest under \"If you have time\"."
+                    else "${s.capacity.weekdayMinutes ?: "–"} min on weekdays · ${s.capacity.weekendMinutes ?: "–"} min at weekends",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                SettingsButton(if (s.capacity.isSet) "Change time budget" else "Set time budget") { editingCapacity = true }
+            }
+        }
 
         item {
             SectionCard {
@@ -221,23 +242,25 @@ fun SettingsScreen(vm: AppViewModel) {
         item {
             SectionCard {
                 Overline("Categories")
-                Text("Turned-off categories are hidden from Today, counts and the widget. Their history is kept.",
+                Text("Turned-off categories are hidden from Today, counts and the widget. Their history is kept. Tap a name to rename or merge it.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Category.entries.forEach { c ->
+                categories.forEach { c ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(c.icon, null, tint = c.color)
                         Spacer(Modifier.size(12.dp))
-                        Text(c.label, Modifier.weight(1f))
+                        TextButton(onClick = { editingCategory = c }, modifier = Modifier.weight(1f)) {
+                            Text(c.name, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurface)
+                        }
                         Switch(
-                            checked = c in s.enabledCategories,
+                            checked = c.enabled,
                             onCheckedChange = { on ->
-                                val next = if (on) s.enabledCategories + c else s.enabledCategories - c
-                                if (next.isEmpty()) nav.showMessage("Keep at least one category on.")
-                                else update { it.copy(enabledCategories = next) }
+                                if (!on && categories.count { it.enabled } <= 1) nav.showMessage("Keep at least one category on.")
+                                else vm.saveCategory(c.copy(enabled = on))
                             },
                         )
                     }
                 }
+                SettingsButton("New category") { newCategory = true }
             }
         }
 
@@ -245,7 +268,7 @@ fun SettingsScreen(vm: AppViewModel) {
             SectionCard {
                 Overline("Home-screen widget")
                 Spacer(Modifier.height(6.dp))
-                WidgetSettingsEditor(s.widget) { w -> update { it.copy(widget = w) } }
+                WidgetSettingsEditor(s.widget, categories) { w -> update { it.copy(widget = w) } }
                 Text(
                     "Add it from your home screen: long-press → Widgets → Ascend. Resize it for more tasks.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -264,17 +287,34 @@ fun SettingsScreen(vm: AppViewModel) {
         item {
             SectionCard {
                 Overline("Your data")
-                Text("Everything is stored only on this phone. Export a backup file regularly (e.g. to Google Drive) and restore it on a new phone.",
+                Text("Your plan and history are stored only on this phone. Export a backup file regularly (e.g. to Google Drive) and restore it on a new phone.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SettingsButton("Export backup (JSON)") { exportLauncher.launch("levelup2027-backup-${LocalDate.now()}.json") }
+                SettingsButton("Export backup (JSON)") { exportLauncher.launch("ascend-backup-${LocalDate.now()}.json") }
                 SettingsButton("Restore from backup") { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
-                SettingsButton("Reset plan to defaults (keep history)") { confirmReset = false }
-                SettingsButton("Erase everything and start fresh", danger = true) { confirmReset = true }
+                if (s.seedVersion == 0) SettingsButton("Load the example plan (Level Up 2027)") { vm.loadExamplePlan(); nav.showMessage("Example plan added") }
+                else SettingsButton("Reset example plan (keep history)") { confirmReset = false }
+                SettingsButton("Delete all my data", danger = true) { confirmErase = true }
+            }
+        }
+
+        if (changeLog.isNotEmpty()) {
+            item {
+                SectionCard {
+                    Overline("Recent plan changes")
+                    changeLog.take(8).forEach { e ->
+                        Text(
+                            java.time.Instant.ofEpochMilli(e.at).atZone(java.time.ZoneId.systemDefault()).toLocalDate().let(app.levelup2027.domain.DateFmt::short) +
+                                " · " + e.summary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (e.detail.isNotBlank()) Text(e.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4)
+                    }
+                }
             }
         }
 
         item {
-            Text("Ascend · v${BuildConfig.VERSION_NAME} · works offline, no account",
+            Text("Ascend · v${BuildConfig.VERSION_NAME} · your plan works offline; AI is optional",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -317,14 +357,49 @@ fun SettingsScreen(vm: AppViewModel) {
         )
     }
 
+    if (editingCapacity) {
+        CapacityDialog(s.capacity.weekdayMinutes, s.capacity.weekendMinutes, onDismiss = { editingCapacity = false }) { a, b ->
+            update { it.copy(capacity = app.levelup2027.data.Capacity(a, b)) }
+            editingCapacity = false
+        }
+    }
+    editingCategory?.let { c ->
+        CategoryDialog(c, categories, onDismiss = { editingCategory = null },
+            onSave = { vm.saveCategory(it); editingCategory = null },
+            onMerge = { into -> vm.mergeCategory(c.id, into); editingCategory = null; nav.showMessage("Merged into ${categories.first { it.id == into }.name}") })
+    }
+    if (newCategory) {
+        CategoryDialog(null, categories, onDismiss = { newCategory = false }, onSave = { vm.createCategory(it.name, it.iconKey); newCategory = false }, onMerge = {})
+    }
+    if (confirmErase) {
+        var forgetKey by remember { mutableStateOf(true) }
+        AlertDialog(
+            onDismissRequest = { confirmErase = false },
+            title = { Text("Delete all your data?") },
+            text = {
+                Column {
+                    Text("This deletes every goal, task, completion, progress entry, review and setting on this phone, and removes this phone's usage record from the Ascend AI server. It can't be undone. Export a backup first if you might want it back.")
+                    SwitchRow("Also remove my API key", null, forgetKey) { forgetKey = it }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmErase = false
+                    vm.eraseAll(forgetKey) { nav.showMessage("All data deleted") }
+                }) { Text("Delete everything", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmErase = false }) { Text("Cancel") } },
+        )
+    }
+
     confirmReset?.let { erase ->
         AlertDialog(
             onDismissRequest = { confirmReset = null },
             title = { Text(if (erase) "Erase everything?" else "Reset the plan?") },
             text = {
                 Text(
-                    if (erase) "All tasks return to the default plan, and all completions, progress entries and reviews are deleted. Consider exporting a backup first."
-                    else "Task definitions, goals and milestones return to the default plan. Your completions, progress entries and reviews are kept.",
+                    if (erase) "All tasks return to the example plan, and all completions, progress entries and reviews are deleted. Consider exporting a backup first."
+                    else "The example plan's tasks, goals and milestones return to their defaults. Any other tasks are removed. Your completions, progress entries and reviews are kept.",
                 )
             },
             confirmButton = {
@@ -363,6 +438,55 @@ private fun TimeDialog(r: Reminder, onDismiss: () -> Unit, onSave: (Int, Int) ->
         title = { Text("Reminder time") },
         text = { TimePicker(state) },
         confirmButton = { TextButton(onClick = { onSave(state.hour, state.minute) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CategoryDialog(
+    original: CategoryEntity?,
+    all: List<CategoryEntity>,
+    onDismiss: () -> Unit,
+    onSave: (CategoryEntity) -> Unit,
+    onMerge: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf(original?.name ?: "") }
+    var icon by remember { mutableStateOf(original?.iconKey ?: "label") }
+    var mergeInto by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (original == null) "New category" else "Edit category") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedTextField(name, { name = it.take(40) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Overline("Icon")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CategoryIcons.KEYS.forEach { k ->
+                        FilterChip(selected = icon == k, onClick = { icon = k }, label = { Icon(categoryIcon(k), k, Modifier.size(18.dp)) })
+                    }
+                }
+                if (original != null) {
+                    Overline("Merge into another category")
+                    Text("Moves all its tasks and goals there and removes this one. History is unaffected.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        all.filter { it.id != original.id }.forEach { c ->
+                            FilterChip(selected = mergeInto == c.id, onClick = { mergeInto = if (mergeInto == c.id) null else c.id }, label = { Text(c.shortName) })
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val target = mergeInto
+                when {
+                    target != null -> onMerge(target)
+                    name.isNotBlank() -> onSave((original ?: CategoryEntity("", "", "")).copy(name = name.trim(), shortName = name.trim().take(12), iconKey = icon))
+                }
+            }) { Text(if (mergeInto != null) "Merge" else "Save") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

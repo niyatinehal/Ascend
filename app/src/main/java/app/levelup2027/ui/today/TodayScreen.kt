@@ -4,6 +4,7 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,13 +23,17 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -47,12 +52,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.levelup2027.data.AppSettings
-import app.levelup2027.data.Campaign
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.DefaultMode
 import app.levelup2027.data.TimeSlot
 import app.levelup2027.domain.DateFmt
 import app.levelup2027.domain.Dates
+import app.levelup2027.domain.FocusItem
+import app.levelup2027.domain.MissedAction
 import app.levelup2027.domain.Occurrence
 import app.levelup2027.domain.Xp
 import app.levelup2027.notify.Notifications
@@ -64,6 +70,7 @@ import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.Pill
 import app.levelup2027.ui.components.ProgressLine
 import app.levelup2027.ui.components.SkipDialog
+import app.levelup2027.ui.components.RescheduleDialog
 import app.levelup2027.ui.components.TaskCard
 import app.levelup2027.ui.theme.icon
 import java.time.LocalTime
@@ -82,8 +89,16 @@ fun TodayScreen(vm: AppViewModel) {
         return
     }
     var skipping by remember { mutableStateOf<Occurrence?>(null) }
+    var moving by remember { mutableStateOf<Occurrence?>(null) }
+    var showIfTime by remember { mutableStateOf(false) }
+    val nav = LocalNav.current
+    val milestones by vm.milestones.collectAsState()
+    val goalsNow by vm.goals.collectAsState()
+    val allTasksState by vm.tasks.collectAsState()
+    val allTasks = allTasksState.orEmpty()
 
     val mode = if (d.lowEnergy) DefaultMode.MINIMUM else s.defaultMode
+    fun modeFor(o: Occurrence) = if (o.task.id in d.preferMinimum) DefaultMode.MINIMUM else mode
     val list: List<Occurrence> = when (filter) {
         TodayFilter.TODAY -> d.occurrences
         TodayFilter.OVERDUE -> d.overdue
@@ -96,8 +111,42 @@ fun TodayScreen(vm: AppViewModel) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item { Header(d) }
+        item { Header(d, s, milestones) }
         item { ProgressCard(d, onLowEnergy = { vm.setLowEnergy(!d.lowEnergy) }) }
+        if (filter == TodayFilter.TODAY && d.focus.mostImportant != null) {
+            item { FocusCard(d, onOpen = { nav.openTask(it.occ.task.id, it.occ.date) }) }
+        }
+        if (filter == TodayFilter.TODAY && d.missed.isNotEmpty()) {
+            item { MissedCard(vm, d, onMove = { moving = it }) }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = nav.openAdjust, modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
+                    Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Adjust my plan")
+                }
+            }
+        }
+        val nextWeek = Dates.weekStart(d.date).plusWeeks(1)
+        val wantsWeekPlan = Dates.daysUntil(d.date, nextWeek) <= 3 &&
+            goalsNow.any { it.isActive && it.source == app.levelup2027.data.Source.AI } &&
+            allTasks.none { it.enabled && it.scheduledDate?.let { sd -> !sd.isBefore(nextWeek) && sd.isBefore(nextWeek.plusDays(7)) } == true && it.source == app.levelup2027.data.Source.AI }
+        if (filter == TodayFilter.TODAY && wantsWeekPlan) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
+                    Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Next week isn't planned yet", style = MaterialTheme.typography.titleSmall)
+                            Text("Your habits continue on their own. AI can add specific tasks for the week of ${DateFmt.short(nextWeek)} based on how this week went.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { nav.planNextWeek(nextWeek) }) { Text("Plan it") }
+                    }
+                }
+            }
+        }
+        if (!s.widgetHintDismissed && d.progress.done > 0) {
+            item { WidgetHint(onDismiss = { vm.updateSettings { it.copy(widgetHintDismissed = true) } }) }
+        }
         if (s.notificationPromptEligible && !s.notificationPromptDismissed) {
             item { NotificationPrompt(vm, s) }
         }
@@ -107,17 +156,41 @@ fun TodayScreen(vm: AppViewModel) {
         if (list.isEmpty()) {
             item { EmptyState(filter, d) }
         } else if (filter == TodayFilter.TODAY) {
+            // Tasks beyond the daily time budget stay visible, just grouped as optional.
+            val main = list.filter { it.task.id !in d.focus.ifTime }
+            val extra = list.filter { it.task.id in d.focus.ifTime }
             TimeSlot.entries.forEach { slot ->
-                val group = list.filter { it.task.timeSlot == slot }
+                val group = main.filter { it.task.timeSlot == slot }
                 if (group.isNotEmpty()) {
                     item(key = "h-$slot") { SlotHeader(slot, group) }
-                    items(group, key = { "${it.task.id}@${it.date}" }) { occ -> Card(occ, mode, false, vm) { skipping = it } }
+                    items(group, key = { "${it.task.id}@${it.date}" }) { occ -> Card(occ, modeFor(occ), false, vm, { moving = it }) { skipping = it } }
                 }
+            }
+            if (extra.isNotEmpty()) {
+                item(key = "iftime") {
+                    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Overline("If you have time (${extra.size})", Modifier.weight(1f))
+                            TextButton(onClick = { showIfTime = !showIfTime }) { Text(if (showIfTime) "Hide" else "Show") }
+                        }
+                        d.focus.tradeOff?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+                if (showIfTime) items(extra, key = { "x-${it.task.id}@${it.date}" }) { occ -> Card(occ, modeFor(occ), false, vm, { moving = it }) { skipping = it } }
             }
         } else {
             items(list, key = { "${it.task.id}@${it.date}" }) { occ ->
-                Card(occ, mode, showDate = filter == TodayFilter.OVERDUE, vm) { skipping = it }
+                Card(occ, modeFor(occ), showDate = filter == TodayFilter.OVERDUE, vm, { moving = it }) { skipping = it }
             }
+        }
+    }
+
+    moving?.let { occ ->
+        RescheduleDialog(occ.task.title, occ.date, d.date, onDismiss = { moving = null }) { to ->
+            vm.reschedule(occ.task, occ.date, to) { r ->
+                nav.showMessage(r.fold({ "Moved to ${DateFmt.short(to)}" }, { "Couldn't move it: ${it.message}" }))
+            }
+            moving = null
         }
     }
 
@@ -135,7 +208,7 @@ fun TodayScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun Card(occ: Occurrence, mode: DefaultMode, showDate: Boolean, vm: AppViewModel, onSkip: (Occurrence) -> Unit) {
+private fun Card(occ: Occurrence, mode: DefaultMode, showDate: Boolean, vm: AppViewModel, onMove: (Occurrence) -> Unit, onSkip: (Occurrence) -> Unit) {
     val nav = LocalNav.current
     TaskCard(
         occ = occ,
@@ -145,11 +218,108 @@ private fun Card(occ: Occurrence, mode: DefaultMode, showDate: Boolean, vm: AppV
         onComplete = { type -> vm.complete(occ.task, occ.date, type) },
         onSkip = { onSkip(occ) },
         onUndo = { vm.undo(occ.task.id, occ.date) },
+        onReschedule = { onMove(occ) },
     )
 }
 
+/** Answers: what matters most today, what to do next, and the minimum useful action. */
 @Composable
-private fun Header(d: DayState) {
+private fun FocusCard(d: DayState, onOpen: (FocusItem) -> Unit) {
+    val top = d.focus.mostImportant ?: return
+    val next = d.focus.next
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FocusLine("Matters most today", top, onOpen)
+            if (next != null && next.taskId != top.taskId) FocusLine("Next up", next, onOpen)
+            val anchor = next ?: top
+            Column {
+                Overline("Minimum if you can't do the full task", color = MaterialTheme.colorScheme.secondary)
+                Text(
+                    app.levelup2027.ui.components.firstBullet(anchor.occ.task.minimumDescription).ifBlank { "Rest is fine today." } +
+                        if (anchor.occ.task.estimatedMinimumMinutes > 0) " · ${anchor.occ.task.estimatedMinimumMinutes} min" else "",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (d.focus.capacity != null) {
+                Text("${d.focus.plannedMinutes} min planned · budget ${d.focus.capacity} min", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusLine(label: String, item: FocusItem, onOpen: (FocusItem) -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable(onClickLabel = "Open details") { onOpen(item) }) {
+        Overline(label, color = MaterialTheme.colorScheme.primary)
+        Text(item.occ.task.title, style = MaterialTheme.typography.titleMedium)
+        val extra = buildList {
+            add("${item.minutes} min" + if (item.useMinimum) " (minimum)" else "")
+            if (item.blockedBy.isNotEmpty()) add("waiting on ${item.blockedBy.first()}")
+            if (item.reason.isNotBlank()) add(item.reason)
+        }
+        Text(extra.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Missed one-time tasks: a suggestion each, confirmed by the user. Nothing rolls forward on its own. */
+@Composable
+private fun MissedCard(vm: AppViewModel, d: DayState, onMove: (Occurrence) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val nav = LocalNav.current
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${d.missed.size} task${if (d.missed.size == 1) "" else "s"} from earlier days", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide" else "Review") }
+            }
+            Text("Nothing was moved automatically. Here's a suggestion for each; your history is kept either way.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (expanded) {
+                d.missed.forEach { m ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(m.occ.task.title + " · " + DateFmt.short(m.occ.date), style = MaterialTheme.typography.bodyMedium)
+                    Text(m.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (m.action == MissedAction.RESCHEDULE && m.toDate != null) {
+                            FilledTonalButton(onClick = {
+                                vm.reschedule(m.occ.task, m.occ.date, m.toDate) { r ->
+                                    r.onSuccess { newId -> if (m.useMinimum) vm.setPreferMinimum(newId, m.toDate, true) }
+                                    nav.showMessage(r.fold({ "Moved to ${DateFmt.short(m.toDate)}" }, { "Couldn't move it: ${it.message}" }))
+                                }
+                            }) { Text("Move to ${DateFmt.short(m.toDate)}") }
+                        } else {
+                            FilledTonalButton(onClick = { vm.complete(m.occ.task, m.occ.date, CompletionType.SKIPPED, app.levelup2027.data.SkipReason.NOT_RELEVANT, "Let go after missing it") }) {
+                                Text("Let it go")
+                            }
+                        }
+                        TextButton(onClick = { onMove(m.occ) }) { Text("Pick a day") }
+                        if (m.action == MissedAction.RESCHEDULE) {
+                            TextButton(onClick = { vm.complete(m.occ.task, m.occ.date, CompletionType.SKIPPED, app.levelup2027.data.SkipReason.NOT_RELEVANT, "Let go after missing it") }) {
+                                Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WidgetHint(onDismiss: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Widgets, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(10.dp))
+            Text("Keep your next step in view: long-press your home screen → Widgets → Ascend.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = onDismiss) { Text("Got it") }
+        }
+    }
+}
+
+@Composable
+private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027.data.Milestone>) {
     val hour = LocalTime.now().hour
     val greeting = when (hour) {
         in 5..11 -> "Good morning"
@@ -169,16 +339,12 @@ private fun Header(d: DayState) {
             ProgressLine(Xp.levelFraction(d.xp), Modifier.width(96.dp).height(3.dp))
         }
     }
-    val campaignText = when {
-        d.date.isBefore(Campaign.START) -> "Campaign starts ${DateFmt.medium(Campaign.START)}"
-        d.date.isAfter(Campaign.END) -> "Campaign complete. ${d.daysShowedUp} days showed up."
-        else -> {
-            val cp = if (!d.date.isAfter(Campaign.FIRST_CHECKPOINT)) Campaign.FIRST_CHECKPOINT to "first checkpoint"
-            else if (!d.date.isAfter(Campaign.CAREER_CHECKPOINT)) Campaign.CAREER_CHECKPOINT to "career checkpoint"
-            else Campaign.END to "campaign end"
-            "Day ${Dates.campaignDay(d.date)} of ${Dates.campaignLength()} · ${Dates.daysUntil(d.date, cp.first)} days to ${cp.second}"
-        }
-    }
+    val start = s.planStartDate
+    val nextMilestone = milestones.filter { !it.done && !it.dueDate.isBefore(d.date) }.minByOrNull { it.dueDate }
+    val campaignText = listOfNotNull(
+        start?.let { if (d.date.isBefore(it)) "Your plan starts ${DateFmt.medium(it)}" else "Day ${Dates.dayNumber(it, d.date)} of your plan" },
+        nextMilestone?.let { "${Dates.daysUntil(d.date, it.dueDate)} days to: ${it.title}" },
+    ).joinToString(" · ")
     Text(campaignText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
@@ -289,7 +455,7 @@ private fun FilterRow(d: DayState, selected: TodayFilter, onSelect: (TodayFilter
 @Composable
 private fun CountLine(filter: TodayFilter, list: List<Occurrence>) {
     val text = when (filter) {
-        TodayFilter.OVERDUE -> "${list.size} one-time task${if (list.size == 1) "" else "s"} from earlier days. Do them late, or skip with no penalty. Recurring tasks never pile up here."
+        TodayFilter.OVERDUE -> "${list.size} one-time task${if (list.size == 1) "" else "s"} from earlier days. Do them late, move them, or skip with no penalty. Recurring tasks never pile up here."
         TodayFilter.COMPLETED -> {
             val i = list.count { it.completion?.completionType == CompletionType.IDEAL }
             "${list.size} completed today · $i ideal · ${list.size - i} minimum"
@@ -319,7 +485,7 @@ private fun EmptyState(filter: TodayFilter, d: DayState) {
     val msg = when (filter) {
         TodayFilter.OVERDUE -> "Nothing overdue. Missed recurring tasks simply return on their next day."
         TodayFilter.COMPLETED -> "Nothing completed yet today. One minimum version is a real start."
-        TodayFilter.TODAY -> if (d.date.isBefore(Campaign.START)) "Your plan starts on ${DateFmt.medium(Campaign.START)}." else "Nothing scheduled today. Rest is part of the plan."
+        TodayFilter.TODAY -> "Nothing scheduled today. Rest is part of the plan."
         else -> "No ${filter.label.lowercase()} tasks today."
     }
     Column(Modifier.fillMaxWidth().padding(vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
