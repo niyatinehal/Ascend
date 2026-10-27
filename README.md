@@ -8,14 +8,14 @@ Version 2.0 grew out of the personal *Level Up 2027* checklist. All of that app'
 
 Stack: Kotlin · Jetpack Compose (Material 3) · Room · DataStore · Jetpack Glance (widget) · Anthropic Java SDK (own-key mode) · Cloudflare Worker + Anthropic TypeScript SDK (server mode).
 
-- **APK:** `dist/Ascend-2.1.0.apk` (release build, R8-shrunk, about 7 MB, signed with the same key as 1.0, so it installs over it)
+- **APK:** `Ascend-2.2.0.apk` from the [latest release](https://github.com/niyatinehal/Ascend/releases/latest) (release build, R8-shrunk, about 7 MB, signed with the same key as 1.0, so it installs over it)
 - **Min Android:** 8.0 (API 26) · **Target:** Android 15 (API 35)
 
 ---
 
 ## 1. Install or update
 
-1. Copy `dist/Ascend-2.1.0.apk` to the phone and open it with Files or Downloads.
+1. Download `Ascend-2.2.0.apk` from the [latest release](https://github.com/niyatinehal/Ascend/releases/latest) on the phone (or copy it over) and open it with Files or Downloads.
 2. Allow **Install unknown apps** for that app if asked, then tap **Install**. If Play Protect warns you, choose **More details → Install anyway**.
 3. **Already using 1.0?** Install over it. The database migrates in place:
    - tasks, completions, goals, progress and reviews are kept
