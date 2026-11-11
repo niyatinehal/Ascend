@@ -167,7 +167,7 @@ fun MicButton(onText: (String) -> Unit) {
 
 /** Settings → AI. */
 @Composable
-fun AiSettingsSection(vm: AppViewModel) {
+fun AiSettingsSection(vm: AppViewModel, showTitle: Boolean = true) {
     val settingsState by vm.settings.collectAsState()
     val s = settingsState ?: return
     val nav = LocalNav.current
@@ -186,7 +186,7 @@ fun AiSettingsSection(vm: AppViewModel) {
     var urlInput by remember(s.ai.serverUrl) { mutableStateOf(s.ai.serverUrl) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Overline("AI planning")
+        if (showTitle) Overline("AI planning")
         Text(
             when (availability) {
                 AiAvailability.READY -> "Ready."

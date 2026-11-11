@@ -74,6 +74,10 @@ import app.levelup2027.ui.AppViewModel
 import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.Pill
 import app.levelup2027.ui.components.ProgressLine
+import app.levelup2027.ui.components.ScreenHeader
+import app.levelup2027.ui.components.SectionTitle
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextOverflow
 import app.levelup2027.ui.tasks.ChipChoice
 import app.levelup2027.ui.theme.color
 import java.time.Instant
@@ -112,16 +116,15 @@ fun GoalsScreen(vm: AppViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Text("Goals", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                "Level ${Xp.level(xp)} · ${Xp.daysShowedUp(completions)} days showed up · ${completions.count { it.isDone }} tasks done",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            ScreenHeader(
+                "Goals",
+                subtitle = "Level ${Xp.level(xp)}  ·  ${Xp.daysShowedUp(completions)} days showed up  ·  ${completions.count { it.isDone }} done",
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = nav.openPlanBuilder, modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
                     Text(if (goals.isEmpty()) "Build my plan" else "Add goals with AI")
@@ -159,9 +162,9 @@ fun GoalsScreen(vm: AppViewModel) {
         }
         item {
             Text(
-                "Targets are goals, not predictions. Projected numbers are never shown as actual results. Only values you record count as progress.",
+                "Targets are goals, not predictions. Only values you record count as progress.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp),
             )
         }
     }
@@ -207,22 +210,24 @@ private fun GoalCard(
     fun v(k: String) = latest[k]?.value
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         onClick = onToggle,
     ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Overline(goal.displayName, color = color)
+                    Spacer(Modifier.height(2.dp))
                     Text(goal.title, style = MaterialTheme.typography.titleMedium)
                 }
                 if (!goal.isActive) Pill(goal.status.replaceFirstChar { it.uppercase() }, MaterialTheme.colorScheme.onSurfaceVariant)
-                Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (expanded) "Collapse" else "Expand")
+                Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(6.dp))
-            Text("Target: ${goal.target}" + " · by ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed)" else "",
+            Text("${goal.target}  ·  by ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed)" else "",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Now: ${goal.currentProgress}", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(4.dp))
 
             // Measurable progress bars, only where a real numeric target exists.
             when (goal.id) {
@@ -283,8 +288,8 @@ private fun GoalCard(
                 }
             }
             if (outcomes.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Overline("This week")
+                Spacer(Modifier.height(10.dp))
+                SectionTitle("This week")
                 outcomes.forEach { o ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = o.done, onCheckedChange = { onOutcome(o, it) })
@@ -293,17 +298,19 @@ private fun GoalCard(
                 }
             }
             next?.let {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Pill("Next · ${DateFmt.monthYear(it.dueDate)}", color)
                     Spacer(Modifier.width(8.dp))
-                    Text(it.title, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                    Text(it.title, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
 
             AnimatedVisibility(expanded) {
                 Column {
-                    Spacer(Modifier.height(10.dp))
+                    ExpandedSection("About")
+                    Text("Now: ${goal.currentProgress}", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(4.dp))
                     Text(goal.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (goal.id == GoalIds.FITNESS) {
                         Spacer(Modifier.height(6.dp))
@@ -317,12 +324,12 @@ private fun GoalCard(
                         Spacer(Modifier.height(6.dp))
                         Text("Assumed: ${goal.assumptions}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.height(12.dp)); Overline("Status")
+                    ExpandedSection("Status")
                     ChipChoice(listOf(GoalStatus.ACTIVE, GoalStatus.PAUSED, GoalStatus.DONE, GoalStatus.DROPPED), goal.status, { it.replaceFirstChar { c -> c.uppercase() } }, onStatus)
                     Text("Paused or dropped goals keep their history; their tasks are lowered in priority but not deleted.",
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                    Spacer(Modifier.height(12.dp)); Overline("Record progress")
+                    ExpandedSection("Record progress")
                     if (defs.isEmpty()) Text("This goal has no numeric measures; it's tracked by the tasks you complete.", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     defs.forEach { d ->
@@ -342,7 +349,7 @@ private fun GoalCard(
                         Text("Target date: ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed · tap to set)" else "")
                     }
 
-                    Spacer(Modifier.height(12.dp)); Overline("Timeline")
+                    ExpandedSection("Timeline")
                     if (milestones.isEmpty()) {
                         Text("No dated milestones; progress is tracked by the values above.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -359,7 +366,7 @@ private fun GoalCard(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp)); Overline("Linked recurring tasks")
+                    ExpandedSection("Linked recurring tasks")
                     val ideal = goalCompletions.count { it.completionType == CompletionType.IDEAL }
                     val min = goalCompletions.count { it.completionType == CompletionType.MINIMUM }
                     Text("${linked.size} tasks · $ideal ideal and $min minimum completions so far", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -368,7 +375,7 @@ private fun GoalCard(
                     }
 
                     if (entries.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp)); Overline("History")
+                        ExpandedSection("History")
                         entries.take(8).forEach { e ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -388,6 +395,14 @@ private fun GoalCard(
             }
         }
     }
+}
+
+/** A divider plus heading that splits the expanded goal into scannable parts. */
+@Composable
+private fun ExpandedSection(title: String) {
+    HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+    SectionTitle(title)
+    Spacer(Modifier.height(4.dp))
 }
 
 @Composable

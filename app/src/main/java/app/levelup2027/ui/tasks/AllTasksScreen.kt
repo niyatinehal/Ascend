@@ -65,6 +65,13 @@ import app.levelup2027.ui.components.CategoryIcon
 import app.levelup2027.ui.components.CompletionBadge
 import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.Pill
+import app.levelup2027.ui.components.ScreenHeader
+import app.levelup2027.ui.components.SectionCard
+import app.levelup2027.ui.components.SectionTitle
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Close
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -118,11 +125,12 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
-                Text("All tasks", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(vertical = 4.dp))
+                ScreenHeader("Tasks")
+                Spacer(Modifier.height(8.dp))
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     SegmentedButton(selected = !weekView, onClick = { weekView = false }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("List") }
                     SegmentedButton(selected = weekView, onClick = { weekView = true }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Weekly plan") }
@@ -133,12 +141,14 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
             } else {
                 item {
                     OutlinedTextField(
-                        query, { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        leadingIcon = { Icon(Icons.Outlined.Search, null) }, placeholder = { Text("Search by title") },
+                        query, { query = it }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), singleLine = true,
+                        leadingIcon = { Icon(Icons.Outlined.Search, null) }, placeholder = { Text("Search tasks") },
+                        shape = RoundedCornerShape(28.dp),
+                        trailingIcon = if (query.isNotEmpty()) { { IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, "Clear search") } } } else null,
                     )
                 }
                 item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         item {
                             DropdownChip(date?.let { if (it == today) "Today" else DateFmt.short(it) } ?: "Any date", date != null,
                                 listOf("Any date" to 0, "Today" to 1, "Pick a date…" to 2)) {
@@ -186,9 +196,10 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
 
                 item {
                     Text(
-                        "${rows.size} task${if (rows.size == 1) "" else "s"}" + (date?.let { " scheduled on ${DateFmt.medium(it)}" } ?: "") +
+                        "${rows.size} task${if (rows.size == 1) "" else "s"}" + (date?.let { " on ${DateFmt.medium(it)}" } ?: "") +
                             if (date == null && state != StateFilter.ANY && state != StateFilter.DISABLED) " · recurring tasks use today's state" else "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp),
                     )
                 }
                 if (rows.isEmpty()) {
@@ -198,7 +209,7 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
                 rows.forEach { (t, d) ->
                     if (date == null && t.isOneTime != lastOneTime) {
                         val header = if (t.isOneTime) "One-time & curriculum" else "Recurring"
-                        item(key = "hdr-$header") { Overline(header, Modifier.padding(top = 10.dp, bottom = 2.dp)) }
+                        item(key = "hdr-$header") { SectionTitle(header, Modifier.padding(start = 4.dp, top = 14.dp, bottom = 2.dp)) }
                         lastOneTime = t.isOneTime
                     }
                     item(key = t.id) { TaskRow(t, d, d?.let { byKey[t.id to it] }) { nav.openTask(t.id, d) } }
@@ -230,22 +241,21 @@ fun AllTasksScreen(vm: AppViewModel, weekPlanRequested: Boolean, onWeekPlanShown
 
 @Composable
 private fun TaskRow(t: Task, date: LocalDate?, c: Completion?, onClick: () -> Unit) {
-    val catalog = LocalCatalog.current
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp).heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
-            CategoryIcon(t.category, 30)
-            Spacer(Modifier.width(10.dp))
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+            CategoryIcon(t.category, 32)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(t.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (t.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    listOfNotNull(t.timeSlot.shortLabel, ScheduleEngine.describeSchedule(t), t.goalId?.let(catalog::goalName)).joinToString(" · "),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    listOfNotNull(t.timeSlot.shortLabel, ScheduleEngine.describeSchedule(t)).joinToString("  ·  "),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
             when {
@@ -260,8 +270,9 @@ private fun TaskRow(t: Task, date: LocalDate?, c: Completion?, onClick: () -> Un
 private fun androidx.compose.foundation.lazy.LazyListScope.weekPlan(all: List<Task>, today: LocalDate, onEdit: (Task) -> Unit) {
     item {
         Text(
-            "Your recurring week. Tap a task to change its days, time slot, or versions. Dated curriculum tasks replace these on their day.",
+            "Your recurring week. Tap a task to change its days, slot or versions.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
         )
     }
     DayOfWeek.entries.forEach { dow ->
@@ -271,27 +282,30 @@ private fun androidx.compose.foundation.lazy.LazyListScope.weekPlan(all: List<Ta
         val ideal = dayTasks.filter { it.activeFrom == null || !it.activeFrom.isAfter(today) }.sumOf { it.estimatedIdealMinutes }
         val min = dayTasks.filter { it.activeFrom == null || !it.activeFrom.isAfter(today) }.sumOf { it.estimatedMinimumMinutes }
         item(key = "dow-$dow") {
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(dow.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Text("Ideal ~${fmtMin(ideal)} · Min ~${fmtMin(min)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        dayTasks.forEach { t ->
-            item(key = "dow-$dow-${t.id}") {
-                Row(
-                    Modifier.fillMaxWidth().clickable { onEdit(t) }.heightIn(min = 44.dp).padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CategoryIcon(t.category, 26)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(t.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            t.timeSlot.label + (t.activeFrom?.takeIf { it.isAfter(today) }?.let { " · from ${DateFmt.monthYear(it)}" } ?: ""),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            SectionCard {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        dow.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f),
+                        color = if (dow == today.dayOfWeek) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(if (dayTasks.isEmpty()) "Free" else "~${fmtMin(ideal)} · min ${fmtMin(min)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                dayTasks.forEach { t ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onEdit(t) }.heightIn(min = 44.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CategoryIcon(t.category, 26)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(t.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                t.timeSlot.label + (t.activeFrom?.takeIf { it.isAfter(today) }?.let { " · from ${DateFmt.monthYear(it)}" } ?: ""),
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text("${t.estimatedIdealMinutes}m", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("${t.estimatedIdealMinutes}/${t.estimatedMinimumMinutes}m", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

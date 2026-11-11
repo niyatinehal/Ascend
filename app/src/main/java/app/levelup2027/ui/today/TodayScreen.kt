@@ -31,6 +31,18 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.UnfoldLess
+import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +85,7 @@ import app.levelup2027.ui.DayState
 import app.levelup2027.ui.LocalNav
 import app.levelup2027.ui.TodayFilter
 import app.levelup2027.ui.components.Overline
+import app.levelup2027.ui.components.HelpText
 import app.levelup2027.ui.components.Pill
 import app.levelup2027.ui.components.ProgressLine
 import app.levelup2027.ui.components.SkipDialog
@@ -144,33 +157,30 @@ fun TodayScreen(vm: AppViewModel) {
         )
     }
 
+    val context = LocalContext.current
+    val askNotifications = s.notificationPromptEligible && !s.notificationPromptDismissed && !Notifications.canPost(context)
+    // At most one tip at a time, so the top of the screen stays calm.
+    val showWidgetTip = !askNotifications && !s.widgetHintDismissed && d.progress.done > 0
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { Header(d, s, milestones, onAdjust = nav.openAdjust, onCustomise = { customising = true }) }
-        if (layout.showProgress) {
-            item(key = "progress") {
-                val p = d.progress
-                CollapsibleCard(
-                    "Today's progress", "${p.done}/${p.scheduled} done · ${p.ideal} ideal · ${p.minimum} min" + if (d.lowEnergy) " · low-energy day" else "",
-                    isCollapsed("progress"), { toggleSection("progress") },
-                ) { ProgressBody(d, onLowEnergy = { vm.setLowEnergy(!d.lowEnergy) }) }
-            }
-        }
-        if (layout.showFocus && filter == TodayFilter.TODAY && d.focus.mostImportant != null) {
-            item(key = "focus") {
-                CollapsibleCard(
-                    "Focus", d.focus.mostImportant.occ.task.title, isCollapsed("focus"), { toggleSection("focus") },
-                    titleColor = MaterialTheme.colorScheme.primary,
-                ) { FocusBody(d, onOpen = { nav.openTask(it.occ.task.id, it.occ.date) }) }
+        if (filter == TodayFilter.TODAY && (layout.showProgress || (layout.showFocus && d.focus.mostImportant != null))) {
+            item(key = "summary") {
+                SummaryCard(
+                    d, showProgress = layout.showProgress, showFocus = layout.showFocus,
+                    onLowEnergy = { vm.setLowEnergy(!d.lowEnergy) },
+                    onOpen = { nav.openTask(it.occ.task.id, it.occ.date) },
+                )
             }
         }
         if (layout.showMissed && filter == TodayFilter.TODAY && d.missed.isNotEmpty()) {
             item(key = "missed") {
                 CollapsibleCard(
-                    "From earlier days (${d.missed.size})", "Nothing moved automatically", isCollapsed("missed"), { toggleSection("missed") },
+                    "From earlier days · ${d.missed.size}", "Tap to decide what to do with them", isCollapsed("missed"), { toggleSection("missed") },
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) { MissedBody(vm, d, onMove = { moving = it }) }
             }
@@ -180,31 +190,43 @@ fun TodayScreen(vm: AppViewModel) {
             goalsNow.any { it.isActive && it.source == app.levelup2027.data.Source.AI } &&
             allTasks.none { it.enabled && it.scheduledDate?.let { sd -> !sd.isBefore(nextWeek) && sd.isBefore(nextWeek.plusDays(7)) } == true && it.source == app.levelup2027.data.Source.AI }
         if (filter == TodayFilter.TODAY && wantsWeekPlan) {
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
-                    Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Next week isn't planned yet", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { nav.planNextWeek(nextWeek) }) { Text("Plan it") }
-                    }
+            item(key = "weekplan") {
+                Banner(Icons.Outlined.EventNote, "Next week isn't planned yet.") {
+                    TextButton(onClick = { nav.planNextWeek(nextWeek) }) { Text("Plan it") }
                 }
             }
         }
-        if (!s.widgetHintDismissed && d.progress.done > 0) {
-            item { WidgetHint(onDismiss = { vm.updateSettings { it.copy(widgetHintDismissed = true) } }) }
+        if (askNotifications) {
+            item(key = "notify") { NotificationPrompt(vm, s) }
+        } else if (showWidgetTip) {
+            item(key = "widget") {
+                Banner(Icons.Outlined.Widgets, "Keep your next step in view: long-press your home screen → Widgets → Ascend.") {
+                    TextButton(onClick = { vm.updateSettings { it.copy(widgetHintDismissed = true) } }) { Text("Got it") }
+                }
+            }
         }
-        if (s.notificationPromptEligible && !s.notificationPromptDismissed) {
-            item { NotificationPrompt(vm, s) }
-        }
-        if (layout.showFilters) item { FilterRow(d, filter, onSelect = { vm.todayFilter.value = it }) }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { CountLine(filter, list) }
-                val anyExpanded = list.any { isExpanded(it) }
-                TextButton(onClick = {
-                    // Flip every visible card to the same state.
-                    toggledCards = if (anyExpanded) list.filter { cardLayout.expandedByDefault }.map(::cardKey).toSet()
-                    else list.filter { !cardLayout.expandedByDefault }.map(::cardKey).toSet()
-                }) { Text(if (anyExpanded) "Collapse all" else "Expand all") }
+
+        item(key = "filters") {
+            val anyExpanded = list.any { isExpanded(it) }
+            Column(Modifier.padding(top = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (layout.showFilters) FilterRow(d, filter, onSelect = { vm.todayFilter.value = it }, modifier = Modifier.weight(1f))
+                    else Text("Tasks", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))
+                    if (list.isNotEmpty()) {
+                        IconButton(onClick = {
+                            // Flip every visible card to the same state.
+                            toggledCards = if (anyExpanded) list.filter { cardLayout.expandedByDefault }.map(::cardKey).toSet()
+                            else list.filter { !cardLayout.expandedByDefault }.map(::cardKey).toSet()
+                        }) {
+                            Icon(
+                                if (anyExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
+                                contentDescription = if (anyExpanded) "Collapse all tasks" else "Expand all tasks",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                if (filter != TodayFilter.TODAY) CountLine(filter, list)
             }
         }
 
@@ -224,10 +246,18 @@ fun TodayScreen(vm: AppViewModel) {
             }
             if (extra.isNotEmpty()) {
                 item(key = "iftime") {
-                    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Overline("If you have time (${extra.size})", Modifier.weight(1f))
-                            TextButton(onClick = { showIfTime = !showIfTime }) { Text(if (showIfTime) "Hide" else "Show") }
+                    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable(onClickLabel = if (showIfTime) "Hide" else "Show") { showIfTime = !showIfTime }.heightIn(min = 44.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.HourglassEmpty, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                            Text("If you have time", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.weight(1f))
+                            Text("${extra.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(if (showIfTime) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, Modifier.padding(start = 4.dp).size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (showIfTime) d.focus.tradeOff?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
@@ -263,43 +293,131 @@ fun TodayScreen(vm: AppViewModel) {
     }
 }
 
-/** Answers: what matters most today, what to do next, and the minimum useful action. */
+/**
+ * The one card at the top of Today: how the day is going, and the single thing to start with.
+ * Answers "what matters most / what next / what's the minimum" without a wall of text.
+ */
 @Composable
-private fun FocusBody(d: DayState, onOpen: (FocusItem) -> Unit) {
-    val top = d.focus.mostImportant ?: return
-    val next = d.focus.next
-    run {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FocusLine("Matters most today", top, onOpen)
-            if (next != null && next.taskId != top.taskId) FocusLine("Next up", next, onOpen)
-            val anchor = next ?: top
-            Column {
-                Overline("Minimum if you can't do the full task", color = MaterialTheme.colorScheme.secondary)
-                Text(
-                    app.levelup2027.ui.components.firstBullet(anchor.occ.task.minimumDescription).ifBlank { "Rest is fine today." } +
-                        if (anchor.occ.task.estimatedMinimumMinutes > 0) " · ${anchor.occ.task.estimatedMinimumMinutes} min" else "",
-                    style = MaterialTheme.typography.bodyMedium,
+private fun SummaryCard(d: DayState, showProgress: Boolean, showFocus: Boolean, onLowEnergy: () -> Unit, onOpen: (FocusItem) -> Unit) {
+    val p = d.progress
+    val next = if (showFocus) d.focus.next ?: d.focus.mostImportant else null
+    val top = if (showFocus) d.focus.mostImportant else null
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            if (showProgress) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            progress = { p.fraction },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 5.dp,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            strokeCap = StrokeCap.Round,
+                            gapSize = 0.dp,
+                        )
+                        Text(
+                            "${p.done}/${p.scheduled}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.semantics { stateDescription = "${p.done} of ${p.scheduled} tasks completed" },
+                        )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        val open = d.occurrences.count { it.isOpen }
+                        Text(
+                            when {
+                                p.scheduled == 0 -> "A free day"
+                                open == 0 -> "All handled for today"
+                                else -> "$open left today"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        val parts = buildList {
+                            if (p.ideal > 0) add("${p.ideal} ideal")
+                            if (p.minimum > 0) add("${p.minimum} minimum")
+                            if (p.skipped > 0) add("${p.skipped} skipped")
+                            d.focus.capacity?.let { add("${d.focus.plannedMinutes}/$it min planned") }
+                        }
+                        if (parts.isNotEmpty()) Text(parts.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                FilterChip(
+                    selected = d.lowEnergy,
+                    onClick = onLowEnergy,
+                    label = { Text(if (d.lowEnergy) "Low-energy day · minimums only" else "Low-energy day?") },
+                    leadingIcon = { Icon(Icons.Outlined.BatteryChargingFull, null, Modifier.size(18.dp)) },
+                    modifier = Modifier.heightIn(min = 40.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        iconColor = MaterialTheme.colorScheme.secondary,
+                    ),
                 )
             }
-            if (d.focus.capacity != null) {
-                Text("${d.focus.plannedMinutes} min planned · budget ${d.focus.capacity} min", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (next != null) {
+                if (showProgress) HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                Overline("Start here", color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open details") { onOpen(next) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(next.occ.task.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        val meta = buildList {
+                            add("${next.minutes} min" + if (next.useMinimum) " · minimum" else "")
+                            if (next.blockedBy.isNotEmpty()) add("waiting on ${next.blockedBy.first()}")
+                        }
+                        Text(meta.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val minText = app.levelup2027.ui.components.firstBullet(next.occ.task.minimumDescription)
+                if (!next.useMinimum && minText.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Short on energy? $minText" + if (next.occ.task.estimatedMinimumMinutes > 0) " (${next.occ.task.estimatedMinimumMinutes} min)" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (top != null && top.taskId != next.taskId) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Matters most today: ${top.occ.task.title}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(onClickLabel = "Open details") { onOpen(top) },
+                    )
+                }
             }
         }
     }
 }
 
+/** A quiet one-message card with its actions underneath. */
 @Composable
-private fun FocusLine(label: String, item: FocusItem, onOpen: (FocusItem) -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClickLabel = "Open details") { onOpen(item) }) {
-        Overline(label, color = MaterialTheme.colorScheme.primary)
-        Text(item.occ.task.title, style = MaterialTheme.typography.titleMedium)
-        val extra = buildList {
-            add("${item.minutes} min" + if (item.useMinimum) " (minimum)" else "")
-            if (item.blockedBy.isNotEmpty()) add("waiting on ${item.blockedBy.first()}")
-            if (item.reason.isNotBlank()) add(item.reason)
+private fun Banner(icon: ImageVector, text: String, actions: @Composable RowScope.() -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 2.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, content = actions)
         }
-        Text(extra.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -307,49 +425,41 @@ private fun FocusLine(label: String, item: FocusItem, onOpen: (FocusItem) -> Uni
 @Composable
 private fun MissedBody(vm: AppViewModel, d: DayState, onMove: (Occurrence) -> Unit) {
     val nav = LocalNav.current
-    run {
-        Column {
-            Text("Nothing was moved automatically. Here's a suggestion for each; your history is kept either way.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            run {
-                d.missed.forEach { m ->
-                    Spacer(Modifier.height(10.dp))
-                    Text(m.occ.task.title + " · " + DateFmt.short(m.occ.date), style = MaterialTheme.typography.bodyMedium)
-                    Text(m.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (m.action == MissedAction.RESCHEDULE && m.toDate != null) {
-                            FilledTonalButton(onClick = {
-                                vm.reschedule(m.occ.task, m.occ.date, m.toDate) { r ->
-                                    r.onSuccess { newId -> if (m.useMinimum) vm.setPreferMinimum(newId, m.toDate, true) }
-                                    nav.showMessage(r.fold({ "Moved to ${DateFmt.short(m.toDate)}" }, { "Couldn't move it: ${it.message}" }))
-                                }
-                            }) { Text("Move to ${DateFmt.short(m.toDate)}") }
-                        } else {
-                            FilledTonalButton(onClick = { vm.complete(m.occ.task, m.occ.date, CompletionType.SKIPPED, app.levelup2027.data.SkipReason.NOT_RELEVANT, "Let go after missing it") }) {
-                                Text("Let it go")
-                            }
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    val shown = if (showAll) d.missed else d.missed.take(3)
+    Column {
+        HelpText("Nothing moved automatically. Decide one at a time; history is kept either way.")
+        shown.forEach { m ->
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            Text(m.occ.task.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(DateFmt.short(m.occ.date) + "  ·  " + m.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                if (m.action == MissedAction.RESCHEDULE && m.toDate != null) {
+                    FilledTonalButton(onClick = {
+                        vm.reschedule(m.occ.task, m.occ.date, m.toDate) { r ->
+                            r.onSuccess { newId -> if (m.useMinimum) vm.setPreferMinimum(newId, m.toDate, true) }
+                            nav.showMessage(r.fold({ "Moved to ${DateFmt.short(m.toDate)}" }, { "Couldn't move it: ${it.message}" }))
                         }
-                        TextButton(onClick = { onMove(m.occ) }) { Text("Pick a day") }
-                        if (m.action == MissedAction.RESCHEDULE) {
-                            TextButton(onClick = { vm.complete(m.occ.task, m.occ.date, CompletionType.SKIPPED, app.levelup2027.data.SkipReason.NOT_RELEVANT, "Let go after missing it") }) {
-                                Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
+                    }, modifier = Modifier.heightIn(min = 40.dp)) { Text("Move to ${DateFmt.short(m.toDate)}") }
+                } else {
+                    FilledTonalButton(
+                        onClick = { vm.complete(m.occ.task, m.occ.date, CompletionType.SKIPPED, app.levelup2027.data.SkipReason.NOT_RELEVANT, "Let go after missing it") },
+                        modifier = Modifier.heightIn(min = 40.dp),
+                    ) { Text("Let it go") }
+                }
+                TextButton(onClick = { onMove(m.occ) }) { Text("Pick a day") }
+                if (m.action == MissedAction.RESCHEDULE) {
+                    TextButton(onClick = { vm.complete(m.occ.task, m.occ.date, CompletionType.SKIPPED, app.levelup2027.data.SkipReason.NOT_RELEVANT, "Let go after missing it") }) {
+                        Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun WidgetHint(onDismiss: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Widgets, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(10.dp))
-            Text("Keep your next step in view: long-press your home screen → Widgets → Ascend.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text("Got it") }
+        if (d.missed.size > 3) {
+            HorizontalDivider(Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            TextButton(onClick = { showAll = !showAll }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showAll) "Show fewer" else "Show all ${d.missed.size}")
+            }
         }
     }
 }
@@ -364,70 +474,34 @@ private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027
         else -> "Hello"
     }
     val level = Xp.level(d.xp)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Column(Modifier.weight(1f)) {
-            Overline(DateFmt.long(d.date))
-            Text(greeting, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Pill("Lv $level · ${d.xp} XP", MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(4.dp))
-            ProgressLine(Xp.levelFraction(d.xp), Modifier.width(80.dp).height(3.dp))
-        }
-        IconButton(onClick = onAdjust) { Icon(Icons.Outlined.AutoAwesome, "Adjust my plan", tint = MaterialTheme.colorScheme.primary) }
-        IconButton(onClick = onCustomise) { Icon(Icons.Outlined.Tune, "Customise Today") }
-    }
     val start = s.planStartDate
     val nextMilestone = milestones.filter { !it.done && !it.dueDate.isBefore(d.date) }.minByOrNull { it.dueDate }
-    val campaignText = listOfNotNull(
-        start?.let { if (d.date.isBefore(it)) "Your plan starts ${DateFmt.medium(it)}" else "Day ${Dates.dayNumber(it, d.date)} of your plan" },
-        nextMilestone?.let { "${Dates.daysUntil(d.date, it.dueDate)} days to: ${it.title}" },
-    ).joinToString(" · ")
-    Text(campaignText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-@Composable
-private fun ProgressBody(d: DayState, onLowEnergy: () -> Unit) {
-    val p = d.progress
-    run {
-        Column {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    "${p.done}/${p.scheduled}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.semantics { stateDescription = "${p.done} of ${p.scheduled} tasks completed" },
-                )
+    Column(Modifier.padding(bottom = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(DateFmt.long(d.date), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(greeting, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            }
+            IconButton(onClick = onAdjust) { Icon(Icons.Outlined.AutoAwesome, "Adjust my plan", tint = MaterialTheme.colorScheme.primary) }
+            IconButton(onClick = onCustomise) { Icon(Icons.Outlined.Tune, "Customise Today", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Pill("Level $level · ${d.xp} XP", MaterialTheme.colorScheme.primary)
+            val plan = start?.let { if (d.date.isBefore(it)) "Plan starts ${DateFmt.medium(it)}" else "Day ${Dates.dayNumber(it, d.date)}" }
+            if (plan != null) {
                 Spacer(Modifier.width(8.dp))
-                Text("tasks completed today", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+                Text(plan, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(8.dp))
-            ProgressLine(p.fraction, Modifier.height(8.dp))
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill("${p.ideal} ideal", MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(6.dp))
-                Pill("${p.minimum} minimum", MaterialTheme.colorScheme.secondary)
-                if (p.skipped > 0) {
-                    Spacer(Modifier.width(6.dp))
-                    Pill("${p.skipped} skipped", MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            FilterChip(
-                selected = d.lowEnergy,
-                onClick = onLowEnergy,
-                label = {
-                    Text(if (d.lowEnergy) "Low-energy day: showing minimum versions · tap to turn off" else "Low-energy day? Show minimum versions")
-                },
-                leadingIcon = { Icon(Icons.Outlined.BatteryChargingFull, null, Modifier.size(18.dp)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    iconColor = MaterialTheme.colorScheme.secondary,
-                ),
+        }
+        nextMilestone?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${Dates.daysUntil(d.date, it.dueDate)} days to ${it.title}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -443,31 +517,20 @@ private fun NotificationPrompt(vm: AppViewModel, s: AppSettings) {
         // Already allowed (e.g. Android < 13); nothing to ask.
         return
     }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.NotificationsActive, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "Want gentle reminders? Morning ${s.morningReminder.label}, work ${s.workReminder.label}, evening ${s.eveningReminder.label}, and Sunday review.",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            Column {
-                TextButton(onClick = {
-                    if (Build.VERSION.SDK_INT >= 33) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    else vm.updateSettings { it.copy(notificationPromptDismissed = true) }
-                }) { Text("Turn on") }
-                TextButton(onClick = { vm.updateSettings { it.copy(notificationPromptDismissed = true) } }) {
-                    Text("No thanks", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+    Banner(Icons.Outlined.NotificationsActive, "Want gentle reminders for your morning, work and evening tasks?") {
+        TextButton(onClick = { vm.updateSettings { it.copy(notificationPromptDismissed = true) } }) {
+            Text("Not now", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        TextButton(onClick = {
+            if (Build.VERSION.SDK_INT >= 33) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else vm.updateSettings { it.copy(notificationPromptDismissed = true) }
+        }) { Text("Turn on") }
     }
 }
 
 @Composable
-private fun FilterRow(d: DayState, selected: TodayFilter, onSelect: (TodayFilter) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun FilterRow(d: DayState, selected: TodayFilter, onSelect: (TodayFilter) -> Unit, modifier: Modifier = Modifier) {
+    LazyRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(TodayFilter.entries) { f ->
             val count = when (f) {
                 TodayFilter.TODAY -> d.occurrences.size
@@ -475,11 +538,15 @@ private fun FilterRow(d: DayState, selected: TodayFilter, onSelect: (TodayFilter
                 TodayFilter.COMPLETED -> d.occurrences.count { it.isDone }
                 else -> d.occurrences.count { it.task.timeSlot == f.slot }
             }
-            if (f == TodayFilter.OVERDUE && count == 0 && selected != f) return@items
+            // Empty filters are just noise; hide them unless they're the current one.
+            if (f != TodayFilter.TODAY && count == 0 && selected != f) return@items
             FilterChip(
                 selected = selected == f,
                 onClick = { onSelect(f) },
-                label = { Text("${f.label} $count") },
+                label = {
+                    Text(f.label)
+                    Text("  $count", color = LocalContentColor.current.copy(alpha = 0.6f))
+                },
                 leadingIcon = f.slot?.let { slot -> { Icon(slot.icon, null, Modifier.size(16.dp)) } },
                 modifier = Modifier.heightIn(min = 40.dp),
             )
@@ -501,19 +568,19 @@ private fun CountLine(filter: TodayFilter, list: List<Occurrence>) {
         }
         else -> "${filter.label}: ${list.count { it.isDone }} of ${list.size} done"
     }
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 2.dp))
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
 }
 
 @Composable
 private fun SlotHeader(slot: TimeSlot, group: List<Occurrence>, collapsed: Boolean, onToggle: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 4.dp).clickable(onClickLabel = if (collapsed) "Show ${slot.label}" else "Hide ${slot.label}", onClick = onToggle)
-            .heightIn(min = 40.dp),
+        Modifier.fillMaxWidth().padding(top = 10.dp).clickable(onClickLabel = if (collapsed) "Show ${slot.label}" else "Hide ${slot.label}", onClick = onToggle)
+            .heightIn(min = 40.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(slot.icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.width(6.dp))
-        Overline(slot.label)
+        Icon(slot.icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Text(slot.label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.weight(1f))
         Text("${group.count { it.isDone }}/${group.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Icon(if (collapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, null, Modifier.padding(start = 4.dp).size(20.dp),
