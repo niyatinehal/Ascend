@@ -51,6 +51,9 @@ import app.levelup2027.ui.AppViewModel
 import app.levelup2027.ui.LocalNav
 import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.SectionCard
+import app.levelup2027.ui.components.ScreenHeader
+import app.levelup2027.ui.components.GroupLabel
+import androidx.compose.ui.text.style.TextAlign
 import java.time.DayOfWeek
 
 @Composable
@@ -86,18 +89,19 @@ fun ReviewScreen(vm: AppViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Text("Weekly review", style = MaterialTheme.typography.headlineSmall)
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            ScreenHeader("Weekly review")
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                 IconButton(onClick = { weekStart = weekStart.minusWeeks(1) }, enabled = weekStart.isAfter(firstWeek)) {
                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous week")
                 }
                 Text(
                     "${DateFmt.short(weekStart)} – ${DateFmt.short(stats.weekEnd)}" + if (weekStart == currentWeek) " (this week)" else "",
                     style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
                 )
                 IconButton(onClick = { weekStart = weekStart.plusWeeks(1) }, enabled = weekStart.isBefore(currentWeek)) {
                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next week")
@@ -106,8 +110,9 @@ fun ReviewScreen(vm: AppViewModel) {
             if (weekStart == currentWeek) {
                 Text(
                     if (today.dayOfWeek == DayOfWeek.SUNDAY) "It's Sunday: a good time to look back. 15 minutes is enough."
-                    else "The review is planned for Sunday evening. Stats so far count only days up to today.",
+                    else "Best done Sunday evening. Stats count days up to today.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -128,10 +133,9 @@ fun ReviewScreen(vm: AppViewModel) {
             }
         }
         item {
-            SectionCard {
+            SectionCard(title = "By goal") {
                 if (stats.workoutsPlanned > 0) Stat("Workouts", "${stats.workouts} of ${stats.workoutsPlanned} planned")
-                stats.byGoal.filter { it.id != null }.forEach { g -> Stat(catalog.goalName(g.id), "${g.done} of ${g.planned} tasks done") }
-                stats.byCategory.forEach { c -> Stat(catalog.category(c.id ?: "").name, "${c.done} of ${c.planned}") }
+                stats.byGoal.filter { it.id != null }.forEach { g -> Stat(catalog.goalName(g.id), "${g.done} of ${g.planned} done") }
                 // The example plan's money goals keep their specific lines.
                 latest["mrr"]?.let { Stat("Actual MRR", "₹%,d".format(it.value.toLong())) }
                 val fund = latest["fund_balance"]?.value
@@ -147,10 +151,16 @@ fun ReviewScreen(vm: AppViewModel) {
                 )
             }
         }
+        if (stats.byCategory.isNotEmpty()) {
+            item {
+                SectionCard(title = "By category") {
+                    stats.byCategory.forEach { c -> Stat(catalog.category(c.id ?: "").name, "${c.done} of ${c.planned}") }
+                }
+            }
+        }
         if (stats.frequentlySkipped.isNotEmpty()) {
             item {
-                SectionCard {
-                    Overline("Skipped this week")
+                SectionCard(title = "Skipped this week") {
                     stats.frequentlySkipped.take(5).forEach {
                         Text("• ${it.title} ×${it.count}" + (it.topReason?.let { r -> " (${r.label.lowercase()})" } ?: ""), style = MaterialTheme.typography.bodyMedium)
                     }
@@ -160,16 +170,14 @@ fun ReviewScreen(vm: AppViewModel) {
             }
         }
         item {
-            SectionCard {
-                Overline("Patterns")
+            SectionCard(title = "Patterns") {
                 stats.observations.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+                if (stats.observations.isEmpty()) Text("Nothing stands out yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
-            SectionCard {
-                Overline("Reflect")
-                Spacer(Modifier.height(6.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionCard(title = "Reflect") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(wins, { wins = it }, label = { Text("What went well?") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                     OutlinedTextField(blockers, { blockers = it }, label = { Text("What blocked me?") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                     OutlinedTextField(adjustments, { adjustments = it }, label = { Text("What should I change next week?") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
@@ -192,7 +200,7 @@ fun ReviewScreen(vm: AppViewModel) {
         }
         val past = reviews.filter { it.weekStartDate != weekStart }
         if (past.isNotEmpty()) {
-            item { Overline("Saved reviews", Modifier.padding(top = 8.dp)) }
+            item { GroupLabel("Saved reviews") }
             items(past, key = { it.id }) { r ->
                 PastReview(r) { weekStart = r.weekStartDate }
             }
@@ -202,8 +210,8 @@ fun ReviewScreen(vm: AppViewModel) {
 
 @Composable
 private fun Stat(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }

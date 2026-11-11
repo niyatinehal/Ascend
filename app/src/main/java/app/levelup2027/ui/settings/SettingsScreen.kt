@@ -65,6 +65,18 @@ import app.levelup2027.ui.LocalNav
 import app.levelup2027.ui.Tab
 import app.levelup2027.ui.components.Overline
 import app.levelup2027.ui.components.SectionCard
+import app.levelup2027.ui.components.GroupLabel
+import app.levelup2027.ui.components.HelpText
+import app.levelup2027.ui.components.LinkRow
+import app.levelup2027.ui.components.ScreenHeader
+import app.levelup2027.ui.components.SectionTitle
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.runtime.saveable.rememberSaveable
 import app.levelup2027.ui.plan.AiSettingsSection
 import app.levelup2027.ui.plan.CapacityDialog
 import app.levelup2027.ui.theme.categoryIcon
@@ -81,16 +93,16 @@ import java.time.LocalDate
 @Composable
 fun WidgetSettingsEditor(value: WidgetSettings, categories: List<CategoryEntity>, onChange: (WidgetSettings) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Overline("Time slot shown")
+        SectionTitle("Time slot shown")
         ChipChoice(listOf<TimeSlot?>(null) + TimeSlot.entries, value.slot, { it?.label ?: "All of today" }) { onChange(value.copy(slot = it)) }
-        Overline("Task text")
+        SectionTitle("Task text")
         ChipChoice(WidgetMode.entries, value.mode, { if (it == WidgetMode.IDEAL) "Ideal versions" else "Minimum versions" }) { onChange(value.copy(mode = it)) }
         Text(
             "Tapping a widget checkbox completes the version shown. On a low-energy day the widget always shows minimum versions.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SwitchRow("Show completed tasks", "Off: only what's left today", value.showCompleted) { onChange(value.copy(showCompleted = it)) }
-        Overline("Categories shown")
+        SectionTitle("Categories shown")
         Text("None selected means all categories.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             categories.filter { it.enabled }.forEach { c ->
@@ -163,65 +175,59 @@ fun SettingsScreen(vm: AppViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { Text("Settings", style = MaterialTheme.typography.headlineSmall) }
+        item { ScreenHeader("Settings") }
 
-        item { SectionCard { AiSettingsSection(vm) } }
-
+        // ---- Planning ----
+        item { GroupLabel("Planning") }
         item {
+            var aiOpen by rememberSaveable { mutableStateOf(false) }
             SectionCard {
-                Overline("Plan prompts")
-                Text("The starter texts for each area in Build my plan. Edit them, add your own areas, or reset them.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SettingsButton("Edit plan prompts") { editingPrompts = true }
+                Row(
+                    Modifier.fillMaxWidth().clickable { aiOpen = !aiOpen }.heightIn(min = 40.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        SectionTitle("AI planning")
+                        HelpText(s.ai.mode.label)
+                    }
+                    Icon(if (aiOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (aiOpen) "Hide AI settings" else "Show AI settings",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (aiOpen) AiSettingsSection(vm, showTitle = false)
             }
         }
-
         item {
-            SectionCard {
-                Overline("Daily time budget")
-                Text(
-                    if (!s.capacity.isSet) "Not set. Set one so Today shows what fits and puts the rest under \"If you have time\"."
-                    else "${s.capacity.weekdayMinutes ?: "–"} min on weekdays · ${s.capacity.weekendMinutes ?: "–"} min at weekends",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                SettingsButton(if (s.capacity.isSet) "Change time budget" else "Set time budget") { editingCapacity = true }
-            }
-        }
-
-        item {
-            SectionCard {
-                Overline("Daily mode")
-                Spacer(Modifier.height(6.dp))
-                ChipChoice(DefaultMode.entries, s.defaultMode, { it.label }) { m -> update { it.copy(defaultMode = m) } }
-                Text(
-                    "Decides which version the task cards emphasise and what one tap completes. The Low-energy switch on Today overrides it for one day only.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        item {
-            SectionCard {
-                Overline("Schedule & tasks")
-                SettingsButton("Edit weekly schedule") { nav.openWeekPlan() }
-                SettingsButton("Edit task definitions") { nav.goTo(Tab.TASKS) }
-                SettingsButton("Add a task") { nav.editTask(null) }
-            }
-        }
-
-        item {
-            SectionCard {
-                Overline("Reminders")
+            SectionCard(title = "Your day") {
+                LinkRow(
+                    "Daily time budget",
+                    value = if (!s.capacity.isSet) "Not set" else "${s.capacity.weekdayMinutes ?: "–"} / ${s.capacity.weekendMinutes ?: "–"} min",
+                ) { editingCapacity = true }
+                HelpText("Weekday / weekend. Tasks that don't fit go under \"If you have time\".")
                 Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (canNotify) "Notifications are allowed." else "Notifications are off for this app.",
-                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
-                    )
-                    if (!canNotify) {
+                Text("Default mode", style = MaterialTheme.typography.bodyLarge)
+                ChipChoice(DefaultMode.entries, s.defaultMode, { it.label }) { m -> update { it.copy(defaultMode = m) } }
+                HelpText("Which version task cards emphasise. The low-energy switch on Today overrides it for a day.")
+            }
+        }
+        item {
+            SectionCard(title = "Plan & schedule") {
+                LinkRow("Weekly schedule") { nav.openWeekPlan() }
+                LinkRow("All tasks") { nav.goTo(Tab.TASKS) }
+                LinkRow("Add a task") { nav.editTask(null) }
+                LinkRow("Plan prompts") { editingPrompts = true }
+            }
+        }
+
+        // ---- Reminders ----
+        item { GroupLabel("Reminders") }
+        item {
+            SectionCard {
+                if (!canNotify) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Notifications are off for Ascend.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                         TextButton(onClick = {
                             if (Build.VERSION.SDK_INT >= 33 && !s.notificationPromptDismissed) {
                                 update { it.copy(notificationPromptDismissed = true) }
@@ -232,35 +238,37 @@ fun SettingsScreen(vm: AppViewModel) {
                         }) { Text("Allow") }
                     }
                 }
-                ReminderRow("Morning checklist", s.morningReminder, { r -> update { it.copy(morningReminder = r) } }) { editingReminder = "morning" to s.morningReminder }
-                ReminderRow("During-work reminder", s.workReminder, { r -> update { it.copy(workReminder = r) } }) { editingReminder = "work" to s.workReminder }
-                ReminderRow("Evening checklist", s.eveningReminder, { r -> update { it.copy(eveningReminder = r) } }) { editingReminder = "evening" to s.eveningReminder }
-                ReminderRow("Weekly review (Sunday)", s.weeklyReviewReminder, { r -> update { it.copy(weeklyReviewReminder = r) } }) { editingReminder = "weekly" to s.weeklyReviewReminder }
-                Text(
-                    "Reminders are skipped when nothing is left in that slot. They use battery-friendly timing and may arrive a few minutes late." +
-                        if (!batteryExempt) " If they arrive very late, exempt the app from battery optimisation." else "",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                ReminderRow("Morning", s.morningReminder, { r -> update { it.copy(morningReminder = r) } }) { editingReminder = "morning" to s.morningReminder }
+                ReminderRow("During work", s.workReminder, { r -> update { it.copy(workReminder = r) } }) { editingReminder = "work" to s.workReminder }
+                ReminderRow("Evening", s.eveningReminder, { r -> update { it.copy(eveningReminder = r) } }) { editingReminder = "evening" to s.eveningReminder }
+                ReminderRow("Weekly review (Sun)", s.weeklyReviewReminder, { r -> update { it.copy(weeklyReviewReminder = r) } }) { editingReminder = "weekly" to s.weeklyReviewReminder }
+                HelpText("Skipped when nothing is left in that slot. May arrive a few minutes late.")
                 if (!batteryExempt) {
-                    SettingsButton("Battery optimisation settings") {
+                    LinkRow("Battery optimisation") {
                         context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                     }
                 }
             }
         }
 
+        // ---- Personalise ----
+        item { GroupLabel("Personalise") }
         item {
-            SectionCard {
-                Overline("Categories")
-                Text("Turned-off categories are hidden from Today, counts and the widget. Their history is kept. Tap a name to rename or merge it.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SectionCard(title = "Appearance") {
+                ChipChoice(ThemeChoice.entries, s.theme, { it.label }) { t -> update(Repository.ChangeKind.OTHER) { it.copy(theme = t) } }
+            }
+        }
+        item {
+            SectionCard(title = "Categories") {
+                HelpText("Off hides them from Today and the widget; history is kept. Tap a name to rename or merge.")
                 categories.forEach { c ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(c.icon, null, tint = c.color)
+                        Icon(c.icon, null, tint = c.color, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.size(12.dp))
-                        TextButton(onClick = { editingCategory = c }, modifier = Modifier.weight(1f)) {
-                            Text(c.name, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurface)
-                        }
+                        Text(
+                            c.name, style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f).clickable { editingCategory = c }.padding(vertical = 12.dp),
+                        )
                         Switch(
                             checked = c.enabled,
                             onCheckedChange = { on ->
@@ -270,62 +278,67 @@ fun SettingsScreen(vm: AppViewModel) {
                         )
                     }
                 }
-                SettingsButton("New category") { newCategory = true }
+                TextButton(onClick = { newCategory = true }) {
+                    Icon(Icons.Outlined.Add, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("New category")
+                }
+            }
+        }
+        item {
+            var widgetOpen by rememberSaveable { mutableStateOf(false) }
+            SectionCard {
+                Row(
+                    Modifier.fillMaxWidth().clickable { widgetOpen = !widgetOpen }.heightIn(min = 40.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        SectionTitle("Home-screen widget")
+                        HelpText("Long-press your home screen → Widgets → Ascend")
+                    }
+                    Icon(if (widgetOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (widgetOpen) "Hide widget options" else "Show widget options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (widgetOpen) WidgetSettingsEditor(s.widget, categories) { w -> update { it.copy(widget = w) } }
             }
         }
 
+        // ---- Data ----
+        item { GroupLabel("Your data") }
         item {
             SectionCard {
-                Overline("Home-screen widget")
-                Spacer(Modifier.height(6.dp))
-                WidgetSettingsEditor(s.widget, categories) { w -> update { it.copy(widget = w) } }
-                Text(
-                    "Add it from your home screen: long-press → Widgets → Ascend. Resize it for more tasks.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        item {
-            SectionCard {
-                Overline("Appearance")
-                Spacer(Modifier.height(6.dp))
-                ChipChoice(ThemeChoice.entries, s.theme, { it.label }) { t -> update(Repository.ChangeKind.OTHER) { it.copy(theme = t) } }
-            }
-        }
-
-        item {
-            SectionCard {
-                Overline("Your data")
-                Text("Your plan and history are stored only on this phone. Export a backup file regularly (e.g. to Google Drive) and restore it on a new phone.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SettingsButton("Export backup (JSON)") { exportLauncher.launch("ascend-backup-${LocalDate.now()}.json") }
-                SettingsButton("Restore from backup") { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
-                if (s.seedVersion == 0) SettingsButton("Load the example plan (Level Up 2027)") { vm.loadExamplePlan(); nav.showMessage("Example plan added") }
-                else SettingsButton("Reset example plan (keep history)") { confirmReset = false }
-                SettingsButton("Delete all my data", danger = true) { confirmErase = true }
+                HelpText("Everything is stored only on this phone. Export a backup now and then (e.g. to Google Drive).")
+                LinkRow("Export backup") { exportLauncher.launch("ascend-backup-${LocalDate.now()}.json") }
+                LinkRow("Restore from backup") { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+                if (s.seedVersion == 0) LinkRow("Load the example plan") { vm.loadExamplePlan(); nav.showMessage("Example plan added") }
+                else LinkRow("Reset example plan") { confirmReset = false }
+                LinkRow("Delete all my data", danger = true) { confirmErase = true }
             }
         }
 
         if (changeLog.isNotEmpty()) {
             item {
-                SectionCard {
-                    Overline("Recent plan changes")
-                    changeLog.take(8).forEach { e ->
-                        Text(
-                            java.time.Instant.ofEpochMilli(e.at).atZone(java.time.ZoneId.systemDefault()).toLocalDate().let(app.levelup2027.domain.DateFmt::short) +
-                                " · " + e.summary,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (e.detail.isNotBlank()) Text(e.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4)
+                var showAll by rememberSaveable { mutableStateOf(false) }
+                SectionCard(title = "Recent plan changes") {
+                    changeLog.take(if (showAll) 8 else 3).forEach { e ->
+                        Column {
+                            Text(
+                                java.time.Instant.ofEpochMilli(e.at).atZone(java.time.ZoneId.systemDefault()).toLocalDate().let(app.levelup2027.domain.DateFmt::short) +
+                                    " · " + e.summary,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (showAll && e.detail.isNotBlank()) HelpText(e.detail)
+                        }
+                    }
+                    if (changeLog.size > 3 || changeLog.any { it.detail.isNotBlank() }) {
+                        TextButton(onClick = { showAll = !showAll }) { Text(if (showAll) "Show less" else "Show more") }
                     }
                 }
             }
         }
 
         item {
-            Text("Ascend · v${BuildConfig.VERSION_NAME} · your plan works offline; AI is optional",
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Ascend · v${BuildConfig.VERSION_NAME} · works offline; AI is optional",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp))
         }
     }
 
@@ -425,17 +438,11 @@ fun SettingsScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun SettingsButton(text: String, danger: Boolean = false, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        Text(text, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-    }
-}
-
-@Composable
 private fun ReminderRow(label: String, r: Reminder, onChange: (Reminder) -> Unit, onEditTime: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        TextButton(onClick = onEditTime) { Text(r.label) }
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge,
+            color = if (r.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = onEditTime, enabled = r.enabled) { Text(r.label) }
         Switch(r.enabled, { onChange(r.copy(enabled = it)) })
     }
 }

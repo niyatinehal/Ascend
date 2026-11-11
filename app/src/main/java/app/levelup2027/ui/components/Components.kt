@@ -20,10 +20,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +53,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import app.levelup2027.data.CardLayout
 import app.levelup2027.data.CategoryEntity
@@ -121,9 +125,9 @@ fun firstBullet(s: String): String =
     s.lineSequence().map { it.trim().removePrefix("•").trim() }.firstOrNull { it.isNotEmpty() } ?: ""
 
 /**
- * Task card. Compact by default: icon, title, one line of details, a one-tap "done" and an
- * expand arrow. Expanded, it shows the ideal and minimum versions and all actions. What appears
- * is set by [layout] (Today → Customise).
+ * Task card. Compact by default: a one-tap "done" circle on the left, the title, and one quiet line
+ * of details. Expanded, it shows the ideal and minimum versions and all actions. What appears is set
+ * by [layout] (Today → Customise).
  * [mode] decides which version is emphasised; low-energy forces MINIMUM without changing the task.
  */
 @Composable
@@ -143,64 +147,72 @@ fun TaskCard(
     val t = occ.task
     val c = occ.completion
     val catalog = LocalCatalog.current
+    val category = catalog.category(t.category)
     val quickType = if (mode == DefaultMode.MINIMUM) CompletionType.MINIMUM else CompletionType.IDEAL
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Card(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
     ) {
-        Column(Modifier.clickable(onClickLabel = "Open details", onClick = onOpen).padding(start = 12.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 44.dp)) {
-                if (layout.showIcon) { CategoryIcon(t.category, 28); Spacer(Modifier.width(10.dp)) }
-                Column(Modifier.weight(1f)) {
+        Column(Modifier.clickable(onClickLabel = "Open details", onClick = onOpen).padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 56.dp)) {
+                LeadingStatus(
+                    title = t.title, completion = c?.completionType, quickType = quickType,
+                    showQuickDone = layout.showQuickDone, category = if (layout.showIcon) category else null,
+                    onComplete = { onComplete(quickType) },
+                )
+                Column(Modifier.weight(1f).padding(end = 4.dp)) {
                     Text(
                         t.title,
                         style = MaterialTheme.typography.titleSmall,
-                        color = if (c == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (c == null) MaterialTheme.colorScheme.onSurface else muted,
+                        textDecoration = if (c?.isDone == true) TextDecoration.LineThrough else null,
                         maxLines = if (expanded) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (layout.showDetails) {
-                        Text(
-                            buildList {
-                                add(catalog.category(t.category).shortName)
-                                if (t.goalId != null) add(catalog.goalName(t.goalId))
-                                if (layout.showMinutes && c == null) add("${if (quickType == CompletionType.MINIMUM) t.estimatedMinimumMinutes else t.estimatedIdealMinutes} min")
-                                t.exactTime?.let { add(it) }
-                                if (showDate) add(app.levelup2027.domain.DateFmt.short(occ.date))
-                            }.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
+                    if (c != null) {
+                        val (label, color) = when (c.completionType) {
+                            CompletionType.IDEAL -> "Done · ideal" to MaterialTheme.colorScheme.primary
+                            CompletionType.MINIMUM -> "Done · minimum" to MaterialTheme.colorScheme.secondary
+                            CompletionType.SKIPPED -> ("Skipped" + (c.skipReason?.let { " · ${it.label}" } ?: "")) to muted
+                            CompletionType.RESCHEDULED -> "Moved to another day" to muted
+                        }
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+                    } else if (layout.showDetails) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (layout.showIcon && layout.showQuickDone) {
+                                Icon(category.icon, contentDescription = category.name, tint = category.color, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(
+                                buildList {
+                                    // Folded cards say only how long it takes; the rest is one tap away.
+                                    if (expanded) add(category.shortName)
+                                    if (expanded && t.goalId != null) add(catalog.goalName(t.goalId))
+                                    if (layout.showMinutes) add("${if (quickType == CompletionType.MINIMUM) t.estimatedMinimumMinutes else t.estimatedIdealMinutes} min")
+                                    t.exactTime?.let { add(it) }
+                                    if (showDate) add(app.levelup2027.domain.DateFmt.short(occ.date))
+                                }.joinToString("  ·  "),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
                 if (c != null) {
-                    CompletionBadge(c.completionType, c.skipReason)
                     IconButton(onClick = onUndo, modifier = Modifier.semantics { contentDescription = "Undo ${t.title}" }) {
-                        Icon(Icons.Outlined.Undo, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Outlined.Undo, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
                     }
-                } else {
-                    if (!expanded && layout.showQuickDone) {
-                        IconButton(
-                            onClick = { onComplete(quickType) },
-                            modifier = Modifier.semantics { contentDescription = "Mark ${t.title} done (${if (quickType == CompletionType.MINIMUM) "minimum" else "ideal"})" },
-                        ) {
-                            Box(
-                                Modifier.size(28.dp).clip(CircleShape).border(2.dp,
-                                    if (quickType == CompletionType.MINIMUM) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary, CircleShape),
-                                contentAlignment = Alignment.Center,
-                            ) {}
-                        }
-                    }
-                    if (onToggleExpand != null) {
-                        IconButton(onClick = onToggleExpand) {
-                            Icon(
-                                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                contentDescription = if (expanded) "Show less" else "Show more",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                } else if (onToggleExpand != null && (layout.expandedByDefault || expanded)) {
+                    IconButton(onClick = onToggleExpand) {
+                        Icon(
+                            if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            contentDescription = if (expanded) "Show less" else "Show more",
+                            tint = muted.copy(alpha = 0.7f),
+                        )
                     }
                 }
             }
@@ -208,17 +220,20 @@ fun TaskCard(
                 val showIdeal = layout.showIdeal && mode != DefaultMode.MINIMUM
                 val showMin = layout.showMinimum && mode != DefaultMode.IDEAL
                 if (showIdeal || showMin) {
-                    Column(Modifier.padding(start = if (layout.showIcon) 38.dp else 0.dp, end = 8.dp, top = 2.dp)) {
+                    Column(
+                        Modifier.padding(start = 48.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         if (showIdeal) VersionLine("Ideal", firstBullet(t.idealDescription), if (layout.showMinutes) t.estimatedIdealMinutes else 0, MaterialTheme.colorScheme.primary)
                         if (showMin) VersionLine("Min", firstBullet(t.minimumDescription), if (layout.showMinutes) t.estimatedMinimumMinutes else 0, MaterialTheme.colorScheme.secondary)
                     }
                 }
                 Row(
-                    Modifier.fillMaxWidth().padding(start = if (layout.showIcon) 34.dp else 0.dp, top = 4.dp),
+                    Modifier.fillMaxWidth().padding(start = 44.dp, top = 4.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val pad = PaddingValues(horizontal = 12.dp)
+                    val pad = PaddingValues(horizontal = 14.dp)
                     when (mode) {
                         DefaultMode.DECIDE -> {
                             FilledTonalButton(onClick = { onComplete(CompletionType.IDEAL) }, contentPadding = pad, modifier = Modifier.heightIn(min = 40.dp)) {
@@ -250,15 +265,58 @@ fun TaskCard(
                     Spacer(Modifier.weight(1f))
                     if (onReschedule != null && layout.showMove) {
                         IconButton(onClick = onReschedule, modifier = Modifier.semantics { contentDescription = "Move ${t.title} to another day" }) {
-                            Icon(Icons.Outlined.EventRepeat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Outlined.EventRepeat, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
                         }
                     }
                     if (layout.showSkip) {
                         TextButton(onClick = onSkip, modifier = Modifier.heightIn(min = 40.dp)) {
-                            Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Skip", color = muted)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The left edge of a task card: an empty ring to tick it off, or its outcome once handled.
+ * With quick-done turned off it falls back to the category icon.
+ */
+@Composable
+private fun LeadingStatus(
+    title: String,
+    completion: CompletionType?,
+    quickType: CompletionType,
+    showQuickDone: Boolean,
+    category: CategoryEntity?,
+    onComplete: () -> Unit,
+) {
+    val ideal = MaterialTheme.colorScheme.primary
+    val minimum = MaterialTheme.colorScheme.secondary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        when (completion) {
+            CompletionType.IDEAL, CompletionType.MINIMUM -> {
+                val color = if (completion == CompletionType.IDEAL) ideal else minimum
+                Box(Modifier.size(24.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(16.dp))
+                }
+            }
+            CompletionType.SKIPPED -> Box(Modifier.size(24.dp).clip(CircleShape).background(muted.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Outlined.Remove, null, tint = muted, modifier = Modifier.size(16.dp))
+            }
+            CompletionType.RESCHEDULED -> Icon(Icons.Outlined.EventRepeat, null, tint = muted, modifier = Modifier.size(20.dp))
+            null -> if (showQuickDone) {
+                val color = if (quickType == CompletionType.MINIMUM) minimum else ideal
+                IconButton(
+                    onClick = onComplete,
+                    modifier = Modifier.semantics { contentDescription = "Mark $title done (${if (quickType == CompletionType.MINIMUM) "minimum" else "ideal"})" },
+                ) {
+                    Box(Modifier.size(24.dp).clip(CircleShape).border(2.dp, color.copy(alpha = 0.8f), CircleShape))
+                }
+            } else if (category != null) {
+                CategoryIcon(category, 30)
             }
         }
     }
@@ -306,7 +364,7 @@ private fun VersionLine(label: String, text: String, minutes: Int, color: Color)
     Row(Modifier.padding(vertical = 1.dp), verticalAlignment = Alignment.Top) {
         Text(
             label.uppercase(), style = OverlineStyle, color = color,
-            modifier = Modifier.width(44.dp).padding(top = 2.dp),
+            modifier = Modifier.width(40.dp).padding(top = 3.dp),
         )
         Text(
             text + if (minutes > 0) " · ${minutes}m" else "",
@@ -355,13 +413,71 @@ fun SkipDialog(taskTitle: String, isRecurring: Boolean, onDismiss: () -> Unit, o
     )
 }
 
+/** A grouped block of content. [title] is an optional heading; children get even spacing. */
 @Composable
-fun SectionCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun SectionCard(modifier: Modifier = Modifier, title: String? = null, content: @Composable () -> Unit) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(16.dp),
-    ) { Column(Modifier.padding(14.dp)) { content() } }
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (title != null) SectionTitle(title)
+            content()
+        }
+    }
+}
+
+/** The big title at the top of each tab, with an optional quiet subtitle and trailing actions. */
+@Composable
+fun ScreenHeader(title: String, subtitle: String? = null, trailing: @Composable () -> Unit = {}) {
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            if (subtitle != null) {
+                Spacer(Modifier.size(2.dp))
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        trailing()
+    }
+}
+
+/** A heading inside a card or between groups of cards. Readable, not shouty caps. */
+@Composable
+fun SectionTitle(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
+    Text(text, style = MaterialTheme.typography.titleSmall, color = color, modifier = modifier)
+}
+
+/** A label above a group of cards (e.g. "Planning" in Settings). */
+@Composable
+fun GroupLabel(text: String) {
+    Text(
+        text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, top = 14.dp, bottom = 2.dp),
+    )
+}
+
+/** Secondary explanation text. Use sparingly. */
+@Composable
+fun HelpText(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+}
+
+/** A tappable list row: label (and optional value) with a chevron. Lighter than a full-width button. */
+@Composable
+fun LinkRow(text: String, value: String? = null, danger: Boolean = false, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).heightIn(min = 48.dp).padding(start = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f),
+            color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+        if (value != null) Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+    }
 }
 
 @Composable

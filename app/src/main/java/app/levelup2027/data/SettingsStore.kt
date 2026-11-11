@@ -46,7 +46,7 @@ data class TodayLayout(
     val showFocus: Boolean = true,
     val showMissed: Boolean = true,
     val showWeekPlanner: Boolean = true,
-    val showFilters: Boolean = true,
+    val showFilters: Boolean = false,
     /** Folded sections: "progress", "focus", "missed", "slot:MORNING", ... */
     val collapsed: Set<String> = setOf("progress"),
 )
@@ -128,28 +128,28 @@ data class AppSettings(
      */
     fun migrated(): AppSettings {
         if (settingsVersion >= CURRENT_VERSION) return this
-        if (settingsVersion >= 2) {
-            return copy(
-                settingsVersion = CURRENT_VERSION,
+        val upgraded = if (settingsVersion >= 2) {
+            copy(ai = if (ai.mode == AiMode.SERVER && ai.serverUrl.isBlank()) ai.copy(mode = AiMode.GEMINI, consentGiven = false) else ai)
+        } else {
+            val widgetCats = widget.categories.map(Cat::fromLegacy).toSet()
+            val allLegacy = Cat.LEGACY.values.toSet()
+            copy(
+                widget = widget.copy(categories = if (widgetCats.containsAll(allLegacy)) emptySet() else widgetCats),
+                onboardingDone = onboardingDone || seedVersion > 0,
+                planStartDate = planStartDate ?: if (seedVersion > 0) Campaign.START else null,
+                // 2.0 defaulted to the Claude server; without a server address, Gemini is the working choice.
                 ai = if (ai.mode == AiMode.SERVER && ai.serverUrl.isBlank()) ai.copy(mode = AiMode.GEMINI, consentGiven = false) else ai,
             )
         }
-        val widgetCats = widget.categories.map(Cat::fromLegacy).toSet()
-        val allLegacy = Cat.LEGACY.values.toSet()
-        return copy(
-            settingsVersion = CURRENT_VERSION,
-            widget = widget.copy(categories = if (widgetCats.containsAll(allLegacy)) emptySet() else widgetCats),
-            onboardingDone = onboardingDone || seedVersion > 0,
-            planStartDate = planStartDate ?: if (seedVersion > 0) Campaign.START else null,
-            // 2.0 defaulted to the Claude server; without a server address, Gemini is the working choice.
-            ai = if (ai.mode == AiMode.SERVER && ai.serverUrl.isBlank()) ai.copy(mode = AiMode.GEMINI, consentGiven = false) else ai,
-        )
+        // 2.3 opens Today without filter chips so the list is the focus; Customise can turn them back on.
+        val focused = if (settingsVersion < 4) upgraded.copy(todayLayout = upgraded.todayLayout.copy(showFilters = false)) else upgraded
+        return focused.copy(settingsVersion = CURRENT_VERSION)
     }
 
     val legacyDisabledCategoryIds: Set<String>
         get() = legacyEnabledCategories?.let { enabled -> (Cat.LEGACY.keys - enabled).map(Cat::fromLegacy).toSet() } ?: emptySet()
 
-    companion object { const val CURRENT_VERSION = 3 }
+    companion object { const val CURRENT_VERSION = 4 }
 }
 
 interface SettingsSource {
