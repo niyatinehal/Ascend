@@ -33,6 +33,10 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +89,7 @@ import app.levelup2027.ui.DayState
 import app.levelup2027.ui.LocalNav
 import app.levelup2027.ui.TodayFilter
 import app.levelup2027.ui.components.Overline
+import app.levelup2027.ui.theme.OverlineStyle
 import app.levelup2027.ui.components.HelpText
 import app.levelup2027.ui.components.Pill
 import app.levelup2027.ui.components.ProgressLine
@@ -99,7 +104,7 @@ import java.time.LocalTime
 fun TodayScreen(vm: AppViewModel) {
     val day by vm.day.collectAsState()
     val settings by vm.settings.collectAsState()
-    val filter by vm.todayFilter.collectAsState()
+    val chosenFilter by vm.todayFilter.collectAsState()
     val d = day
     val s = settings
     if (d == null || s == null) {
@@ -115,12 +120,13 @@ fun TodayScreen(vm: AppViewModel) {
     // Cards whose expanded state differs from the default (so "default expanded" can flip them all).
     var toggledCards by rememberSaveable { mutableStateOf(setOf<String>()) }
     val nav = LocalNav.current
-    val milestones by vm.milestones.collectAsState()
     val goalsNow by vm.goals.collectAsState()
     val allTasksState by vm.tasks.collectAsState()
     val allTasks = allTasksState.orEmpty()
     val layout = s.todayLayout
     val cardLayout = s.cardLayout
+    // Without the chips there is no way to leave a filter, so Today always shows the whole day.
+    val filter = if (layout.showFilters) chosenFilter else TodayFilter.TODAY
 
     fun isCollapsed(id: String) = id in layout.collapsed
     fun toggleSection(id: String) = vm.updateSettings(app.levelup2027.data.Repository.ChangeKind.OTHER) {
@@ -157,32 +163,40 @@ fun TodayScreen(vm: AppViewModel) {
         )
     }
 
-    val context = LocalContext.current
-    val askNotifications = s.notificationPromptEligible && !s.notificationPromptDismissed && !Notifications.canPost(context)
-    // At most one tip at a time, so the top of the screen stays calm.
-    val showWidgetTip = !askNotifications && !s.widgetHintDismissed && d.progress.done > 0
+    // The "Start here" task lives in the summary card, so it isn't repeated in the list below.
+    val startHere = (d.focus.next ?: d.focus.mostImportant)?.takeIf { layout.showFocus && filter == TodayFilter.TODAY && it.occ.isOpen }
+    var missedOpen by rememberSaveable { mutableStateOf(false) }
+    var doneOpen by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { Header(d, s, milestones, onAdjust = nav.openAdjust, onCustomise = { customising = true }) }
+        item { Header(d, onAdjust = nav.openAdjust, onCustomise = { customising = true }) }
         if (filter == TodayFilter.TODAY && (layout.showProgress || (layout.showFocus && d.focus.mostImportant != null))) {
             item(key = "summary") {
                 SummaryCard(
                     d, showProgress = layout.showProgress, showFocus = layout.showFocus,
-                    onLowEnergy = { vm.setLowEnergy(!d.lowEnergy) },
                     onOpen = { nav.openTask(it.occ.task.id, it.occ.date) },
+                    onComplete = { f -> vm.complete(f.occ.task, f.occ.date, if (modeFor(f.occ) == DefaultMode.MINIMUM || f.useMinimum) CompletionType.MINIMUM else CompletionType.IDEAL) },
                 )
             }
         }
+
+        // Secondary things live behind one quiet line each, never as cards competing with the list.
         if (layout.showMissed && filter == TodayFilter.TODAY && d.missed.isNotEmpty()) {
             item(key = "missed") {
-                CollapsibleCard(
-                    "From earlier days · ${d.missed.size}", "Tap to decide what to do with them", isCollapsed("missed"), { toggleSection("missed") },
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) { MissedBody(vm, d, onMove = { moving = it }) }
+                QuietRow(
+                    "${d.missed.size} from earlier days",
+                    trailing = { Icon(if (missedOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    onClick = { missedOpen = !missedOpen },
+                )
+            }
+            if (missedOpen) item(key = "missed-body") {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(16.dp)) {
+                    Column(Modifier.padding(16.dp)) { MissedBody(vm, d, onMove = { moving = it }) }
+                }
             }
         }
         val nextWeek = Dates.weekStart(d.date).plusWeeks(1)
@@ -191,81 +205,79 @@ fun TodayScreen(vm: AppViewModel) {
             allTasks.none { it.enabled && it.scheduledDate?.let { sd -> !sd.isBefore(nextWeek) && sd.isBefore(nextWeek.plusDays(7)) } == true && it.source == app.levelup2027.data.Source.AI }
         if (filter == TodayFilter.TODAY && wantsWeekPlan) {
             item(key = "weekplan") {
-                Banner(Icons.Outlined.EventNote, "Next week isn't planned yet.") {
-                    TextButton(onClick = { nav.planNextWeek(nextWeek) }) { Text("Plan it") }
-                }
-            }
-        }
-        if (askNotifications) {
-            item(key = "notify") { NotificationPrompt(vm, s) }
-        } else if (showWidgetTip) {
-            item(key = "widget") {
-                Banner(Icons.Outlined.Widgets, "Keep your next step in view: long-press your home screen → Widgets → Ascend.") {
-                    TextButton(onClick = { vm.updateSettings { it.copy(widgetHintDismissed = true) } }) { Text("Got it") }
-                }
+                QuietRow(
+                    "Next week isn't planned yet",
+                    trailing = { Text("Plan it", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) },
+                    onClick = { nav.planNextWeek(nextWeek) },
+                )
             }
         }
 
-        item(key = "filters") {
-            val anyExpanded = list.any { isExpanded(it) }
-            Column(Modifier.padding(top = 6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (layout.showFilters) FilterRow(d, filter, onSelect = { vm.todayFilter.value = it }, modifier = Modifier.weight(1f))
-                    else Text("Tasks", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))
-                    if (list.isNotEmpty()) {
-                        IconButton(onClick = {
-                            // Flip every visible card to the same state.
-                            toggledCards = if (anyExpanded) list.filter { cardLayout.expandedByDefault }.map(::cardKey).toSet()
-                            else list.filter { !cardLayout.expandedByDefault }.map(::cardKey).toSet()
-                        }) {
-                            Icon(
-                                if (anyExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
-                                contentDescription = if (anyExpanded) "Collapse all tasks" else "Expand all tasks",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+        if (layout.showFilters) {
+            item(key = "filters") {
+                Column(Modifier.padding(top = 6.dp)) {
+                    FilterRow(d, filter, onSelect = { vm.todayFilter.value = it })
+                    if (filter != TodayFilter.TODAY) CountLine(filter, list)
                 }
-                if (filter != TodayFilter.TODAY) CountLine(filter, list)
             }
         }
 
         if (list.isEmpty()) {
             item { EmptyState(filter, d) }
         } else if (filter == TodayFilter.TODAY) {
+            // Only what's left is in the main list; finished tasks fold into "Done" at the bottom.
+            val open = list.filter { it.isOpen && it.task.id != startHere?.occ?.task?.id }
+            val handled = list.filter { !it.isOpen }
             // Tasks beyond the daily time budget stay visible, just grouped as optional.
-            val main = list.filter { it.task.id !in d.focus.ifTime }
-            val extra = list.filter { it.task.id in d.focus.ifTime }
+            val main = open.filter { it.task.id !in d.focus.ifTime }
+            val extra = open.filter { it.task.id in d.focus.ifTime }
+            if (open.isEmpty() && startHere == null) item(key = "all-done") { EmptyState(filter, d, allDone = true) }
             TimeSlot.entries.forEach { slot ->
                 val group = main.filter { it.task.timeSlot == slot }
                 if (group.isNotEmpty()) {
                     val id = "slot:${slot.name}"
-                    item(key = "h-$slot") { SlotHeader(slot, group, collapsed = isCollapsed(id), onToggle = { toggleSection(id) }) }
+                    item(key = "h-$slot") { SlotHeader(slot, group.size, collapsed = isCollapsed(id), onToggle = { toggleSection(id) }) }
                     if (!isCollapsed(id)) items(group, key = ::cardKey) { occ -> TaskItem(occ) }
                 }
             }
             if (extra.isNotEmpty()) {
                 item(key = "iftime") {
-                    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth().clickable(onClickLabel = if (showIfTime) "Hide" else "Show") { showIfTime = !showIfTime }.heightIn(min = 44.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Outlined.HourglassEmpty, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(8.dp))
-                            Text("If you have time", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.weight(1f))
-                            Text("${extra.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Icon(if (showIfTime) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, Modifier.padding(start = 4.dp).size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (showIfTime) d.focus.tradeOff?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Column(Modifier.padding(top = 8.dp)) {
+                        QuietRow(
+                            "If you have time · ${extra.size}",
+                            trailing = { Icon(if (showIfTime) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            onClick = { showIfTime = !showIfTime },
+                        )
+                        if (showIfTime) d.focus.tradeOff?.let { HelpText(it, Modifier.padding(start = 4.dp, bottom = 4.dp)) }
                     }
                 }
                 if (showIfTime) items(extra, key = { "x-" + cardKey(it) }) { occ -> TaskItem(occ) }
             }
+            if (handled.isNotEmpty()) {
+                item(key = "done") {
+                    Box(Modifier.padding(top = 8.dp)) {
+                        QuietRow(
+                            "Done · ${handled.size}",
+                            trailing = { Icon(if (doneOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            onClick = { doneOpen = !doneOpen },
+                        )
+                    }
+                }
+                if (doneOpen) items(handled, key = { "d-" + cardKey(it) }) { occ -> TaskItem(occ) }
+            }
         } else {
             items(list, key = ::cardKey) { occ -> TaskItem(occ, showDate = filter == TodayFilter.OVERDUE) }
+        }
+        item(key = "lowenergy") {
+            // The one escape hatch for a hard day, kept out of the way at the bottom.
+            TextButton(onClick = { vm.setLowEnergy(!d.lowEnergy) }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Icon(Icons.Outlined.BatteryChargingFull, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (d.lowEnergy) "Low-energy day is on · turn off" else "Low on energy today? Show minimum versions",
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
         }
     }
 
@@ -298,19 +310,18 @@ fun TodayScreen(vm: AppViewModel) {
  * Answers "what matters most / what next / what's the minimum" without a wall of text.
  */
 @Composable
-private fun SummaryCard(d: DayState, showProgress: Boolean, showFocus: Boolean, onLowEnergy: () -> Unit, onOpen: (FocusItem) -> Unit) {
+private fun SummaryCard(d: DayState, showProgress: Boolean, showFocus: Boolean, onOpen: (FocusItem) -> Unit, onComplete: (FocusItem) -> Unit) {
     val p = d.progress
     val next = if (showFocus) d.focus.next ?: d.focus.mostImportant else null
-    val top = if (showFocus) d.focus.mostImportant else null
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(20.dp)) {
             if (showProgress) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(
                             progress = { p.fraction },
                             modifier = Modifier.fillMaxSize(),
@@ -326,98 +337,58 @@ private fun SummaryCard(d: DayState, showProgress: Boolean, showFocus: Boolean, 
                             modifier = Modifier.semantics { stateDescription = "${p.done} of ${p.scheduled} tasks completed" },
                         )
                     }
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        val open = d.occurrences.count { it.isOpen }
+                    Spacer(Modifier.width(16.dp))
+                    val open = d.occurrences.count { it.isOpen }
+                    Column {
                         Text(
                             when {
                                 p.scheduled == 0 -> "A free day"
-                                open == 0 -> "All handled for today"
-                                else -> "$open left today"
+                                open == 0 -> "All done for today"
+                                open == 1 -> "1 task left"
+                                else -> "$open tasks left"
                             },
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                         )
-                        val parts = buildList {
-                            if (p.ideal > 0) add("${p.ideal} ideal")
-                            if (p.minimum > 0) add("${p.minimum} minimum")
-                            if (p.skipped > 0) add("${p.skipped} skipped")
-                            d.focus.capacity?.let { add("${d.focus.plannedMinutes}/$it min planned") }
-                        }
-                        if (parts.isNotEmpty()) Text(parts.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (d.lowEnergy) Text("Low-energy day · minimums only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                FilterChip(
-                    selected = d.lowEnergy,
-                    onClick = onLowEnergy,
-                    label = { Text(if (d.lowEnergy) "Low-energy day · minimums only" else "Low-energy day?") },
-                    leadingIcon = { Icon(Icons.Outlined.BatteryChargingFull, null, Modifier.size(18.dp)) },
-                    modifier = Modifier.heightIn(min = 40.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        iconColor = MaterialTheme.colorScheme.secondary,
-                    ),
-                )
             }
-            if (next != null) {
-                if (showProgress) HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                Overline("Start here", color = MaterialTheme.colorScheme.primary)
+            if (next != null && next.occ.isOpen) {
+                if (showProgress) Spacer(Modifier.height(20.dp))
+                Text("START HERE", style = OverlineStyle, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(6.dp))
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open details") { onOpen(next) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.weight(1f)) {
+                    val ring = if (next.useMinimum || d.lowEnergy) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                    IconButton(
+                        onClick = { onComplete(next) },
+                        modifier = Modifier.offset(x = (-12).dp).semantics { contentDescription = "Mark ${next.occ.task.title} done" },
+                    ) {
+                        Box(Modifier.size(26.dp).clip(CircleShape).border(2.dp, ring, CircleShape))
+                    }
+                    Column(Modifier.weight(1f).offset(x = (-8).dp)) {
                         Text(next.occ.task.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        val meta = buildList {
-                            add("${next.minutes} min" + if (next.useMinimum) " · minimum" else "")
-                            if (next.blockedBy.isNotEmpty()) add("waiting on ${next.blockedBy.first()}")
-                        }
-                        Text(meta.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${next.minutes} min" + if (next.useMinimum) " · minimum" else "",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                val minText = app.levelup2027.ui.components.firstBullet(next.occ.task.minimumDescription)
-                if (!next.useMinimum && minText.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Short on energy? $minText" + if (next.occ.task.estimatedMinimumMinutes > 0) " (${next.occ.task.estimatedMinimumMinutes} min)" else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (top != null && top.taskId != next.taskId) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Matters most today: ${top.occ.task.title}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable(onClickLabel = "Open details") { onOpen(top) },
-                    )
                 }
             }
         }
     }
 }
 
-/** A quiet one-message card with its actions underneath. */
+/** One tappable line for secondary things (earlier days, done, plan next week). */
 @Composable
-private fun Banner(icon: ImageVector, text: String, actions: @Composable RowScope.() -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 2.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(12.dp))
-                Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, content = actions)
-        }
+private fun QuietRow(text: String, trailing: @Composable () -> Unit, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).heightIn(min = 44.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        trailing()
     }
 }
 
@@ -465,66 +436,20 @@ private fun MissedBody(vm: AppViewModel, d: DayState, onMove: (Occurrence) -> Un
 }
 
 @Composable
-private fun Header(d: DayState, s: AppSettings, milestones: List<app.levelup2027.data.Milestone>, onAdjust: () -> Unit, onCustomise: () -> Unit) {
-    val hour = LocalTime.now().hour
-    val greeting = when (hour) {
+private fun Header(d: DayState, onAdjust: () -> Unit, onCustomise: () -> Unit) {
+    val greeting = when (LocalTime.now().hour) {
         in 5..11 -> "Good morning"
         in 12..16 -> "Good afternoon"
         in 17..21 -> "Good evening"
         else -> "Hello"
     }
-    val level = Xp.level(d.xp)
-    val start = s.planStartDate
-    val nextMilestone = milestones.filter { !it.done && !it.dueDate.isBefore(d.date) }.minByOrNull { it.dueDate }
-    Column(Modifier.padding(bottom = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(DateFmt.long(d.date), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(greeting, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-            }
-            IconButton(onClick = onAdjust) { Icon(Icons.Outlined.AutoAwesome, "Adjust my plan", tint = MaterialTheme.colorScheme.primary) }
-            IconButton(onClick = onCustomise) { Icon(Icons.Outlined.Tune, "Customise Today", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(DateFmt.long(d.date), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(greeting, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Pill("Level $level · ${d.xp} XP", MaterialTheme.colorScheme.primary)
-            val plan = start?.let { if (d.date.isBefore(it)) "Plan starts ${DateFmt.medium(it)}" else "Day ${Dates.dayNumber(it, d.date)}" }
-            if (plan != null) {
-                Spacer(Modifier.width(8.dp))
-                Text(plan, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        nextMilestone?.let {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "${Dates.daysUntil(d.date, it.dueDate)} days to ${it.title}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun NotificationPrompt(vm: AppViewModel, s: AppSettings) {
-    val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        vm.updateSettings { it.copy(notificationPromptDismissed = true) }
-    }
-    if (Notifications.canPost(context)) {
-        // Already allowed (e.g. Android < 13); nothing to ask.
-        return
-    }
-    Banner(Icons.Outlined.NotificationsActive, "Want gentle reminders for your morning, work and evening tasks?") {
-        TextButton(onClick = { vm.updateSettings { it.copy(notificationPromptDismissed = true) } }) {
-            Text("Not now", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        TextButton(onClick = {
-            if (Build.VERSION.SDK_INT >= 33) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            else vm.updateSettings { it.copy(notificationPromptDismissed = true) }
-        }) { Text("Turn on") }
+        IconButton(onClick = onAdjust) { Icon(Icons.Outlined.AutoAwesome, "Adjust my plan", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        IconButton(onClick = onCustomise) { Icon(Icons.Outlined.Tune, "Customise Today", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
@@ -572,28 +497,26 @@ private fun CountLine(filter: TodayFilter, list: List<Occurrence>) {
 }
 
 @Composable
-private fun SlotHeader(slot: TimeSlot, group: List<Occurrence>, collapsed: Boolean, onToggle: () -> Unit) {
+private fun SlotHeader(slot: TimeSlot, left: Int, collapsed: Boolean, onToggle: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp).clickable(onClickLabel = if (collapsed) "Show ${slot.label}" else "Hide ${slot.label}", onClick = onToggle)
-            .heightIn(min = 40.dp).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(12.dp))
+            .clickable(onClickLabel = if (collapsed) "Show ${slot.label}" else "Hide ${slot.label}", onClick = onToggle)
+            .heightIn(min = 36.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(slot.icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.width(8.dp))
-        Text(slot.label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+        Text(slot.label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (collapsed) Text("  ·  $left", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.weight(1f))
-        Text("${group.count { it.isDone }}/${group.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Icon(if (collapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, null, Modifier.padding(start = 4.dp).size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (collapsed) Icon(Icons.Outlined.ExpandMore, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-private fun EmptyState(filter: TodayFilter, d: DayState) {
+private fun EmptyState(filter: TodayFilter, d: DayState, allDone: Boolean = false) {
     val msg = when (filter) {
         TodayFilter.OVERDUE -> "Nothing overdue. Missed recurring tasks simply return on their next day."
         TodayFilter.COMPLETED -> "Nothing completed yet today. One minimum version is a real start."
-        TodayFilter.TODAY -> "Nothing scheduled today. Rest is part of the plan."
+        TodayFilter.TODAY -> if (allDone) "Everything is handled for today. Nice work." else "Nothing scheduled today. Rest is part of the plan."
         else -> "No ${filter.label.lowercase()} tasks today."
     }
     Column(Modifier.fillMaxWidth().padding(vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {

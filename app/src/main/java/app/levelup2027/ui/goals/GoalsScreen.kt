@@ -224,10 +224,7 @@ private fun GoalCard(
                 Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(6.dp))
-            Text("${goal.target}  ·  by ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed)" else "",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Measurable progress bars, only where a real numeric target exists.
             when (goal.id) {
@@ -309,6 +306,8 @@ private fun GoalCard(
             AnimatedVisibility(expanded) {
                 Column {
                     ExpandedSection("About")
+                    Text("Target: ${goal.target}  ·  by ${DateFmt.medium(goal.targetDate)}" + if (goal.deadlineAssumed) " (assumed)" else "",
+                        style = MaterialTheme.typography.bodyMedium)
                     Text("Now: ${goal.currentProgress}", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(4.dp))
                     Text(goal.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

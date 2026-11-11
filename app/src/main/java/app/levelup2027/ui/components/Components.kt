@@ -182,12 +182,13 @@ fun TaskCard(
                     } else if (layout.showDetails) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (layout.showIcon && layout.showQuickDone) {
-                                Icon(category.icon, contentDescription = null, tint = category.color, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
+                                Icon(category.icon, contentDescription = category.name, tint = category.color, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
                             }
                             Text(
                                 buildList {
-                                    add(category.shortName)
+                                    // Folded cards say only how long it takes; the rest is one tap away.
+                                    if (expanded) add(category.shortName)
                                     if (expanded && t.goalId != null) add(catalog.goalName(t.goalId))
                                     if (layout.showMinutes) add("${if (quickType == CompletionType.MINIMUM) t.estimatedMinimumMinutes else t.estimatedIdealMinutes} min")
                                     t.exactTime?.let { add(it) }
@@ -205,7 +206,7 @@ fun TaskCard(
                     IconButton(onClick = onUndo, modifier = Modifier.semantics { contentDescription = "Undo ${t.title}" }) {
                         Icon(Icons.Outlined.Undo, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
                     }
-                } else if (onToggleExpand != null) {
+                } else if (onToggleExpand != null && (layout.expandedByDefault || expanded)) {
                     IconButton(onClick = onToggleExpand) {
                         Icon(
                             if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
