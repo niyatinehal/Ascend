@@ -142,6 +142,12 @@ class AppViewModel(private val c: AppContainer) : ViewModel() {
 
     fun setLowEnergy(on: Boolean) = viewModelScope.launch { repo.setLowEnergy(_today.value, on) }
 
+    /** Returns validation problems (nothing saved) or an empty list. */
+    suspend fun savePreset(kind: app.levelup2027.domain.PresetKind, blocks: List<app.levelup2027.domain.Block>): List<String> = repo.savePreset(kind, blocks)
+    fun setPreset(kind: app.levelup2027.domain.PresetKind) = viewModelScope.launch { repo.setPreset(_today.value, kind) }
+    fun setRoutineSetup(state: app.levelup2027.domain.RoutineSetup) = viewModelScope.launch { repo.setRoutineSetup(state) }
+    fun dismissRoutinePrompt() = viewModelScope.launch { repo.dismissRoutinePrompt() }
+
     fun saveTask(task: Task) = viewModelScope.launch { repo.saveTask(task) }
     fun deleteTask(id: String) = viewModelScope.launch { repo.deleteTask(id) }
 

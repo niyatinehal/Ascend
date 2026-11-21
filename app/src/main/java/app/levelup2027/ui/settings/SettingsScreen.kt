@@ -221,6 +221,10 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
+        // ---- Routine ----
+        item { GroupLabel("Routine") }
+        item { app.levelup2027.ui.routine.RoutineSettingsSection(vm) }
+
         // ---- Reminders ----
         item { GroupLabel("Reminders") }
         item {
