@@ -64,6 +64,7 @@ object ReminderScheduler {
     }
 
     fun scheduleAll(context: Context, s: AppSettings) {
+        CheckInScheduler.schedule(context, s)
         val now = ZonedDateTime.now(ZoneId.systemDefault())
         for (kind in ReminderKind.entries) {
             if (kind == ReminderKind.MIDNIGHT) {
@@ -105,6 +106,7 @@ object Notifications {
         val ch = NotificationChannel(CHANNEL, context.getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_DEFAULT)
         ch.description = context.getString(R.string.channel_reminders_desc)
         context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
+        CheckInNotifications.createChannel(context)
     }
 
     fun canPost(context: Context): Boolean {

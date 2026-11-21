@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Block check-ins fire when a routine block ends. USE_EXACT_ALARM is granted automatically on
+         Android 13+; the app is distributed as an APK, not through Play. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Merged in by WorkManager (a Glance dependency) but never needed here. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
@@ -66,6 +71,20 @@
         <receiver
             android:name=".notify.AlarmReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".notify.CheckInReceiver"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.checkin.CheckInActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity="app.levelup2027.checkin"
+            android:theme="@style/Theme.LevelUp" />
 
         <receiver
             android:name=".notify.SystemEventsReceiver"

@@ -3,5 +3,7 @@
     <string name="widget_name">Ascend: today</string>
     <string name="widget_description">Today\'s tasks. Tap a circle to complete; resize for more tasks.</string>
     <string name="channel_reminders">Checklist reminders</string>
+    <string name="channel_checkins">Block check-ins</string>
+    <string name="channel_checkins_desc">When a block in your routine ends, a full-screen check-in to tick off what you finished.</string>
     <string name="channel_reminders_desc">A few daily nudges (morning, during work, evening) and the Sunday review.</string>
 </resources>
