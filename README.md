@@ -8,22 +8,22 @@ Version 2.0 grew out of the personal *Level Up 2027* checklist. All of that app'
 
 Stack: Kotlin · Jetpack Compose (Material 3) · Room · DataStore · Jetpack Glance (widget) · Anthropic Java SDK (own-key mode) · Cloudflare Worker + Anthropic TypeScript SDK (server mode).
 
-- **APK:** `Ascend-2.3.0.apk` from the [latest release](https://github.com/niyatinehal/Ascend/releases/latest) (release build, R8-shrunk, about 7 MB). 2.3.0 is signed with a new key, so it doesn't install over 2.2.0 or earlier: see [Install or update](#1-install-or-update)
+- **APK:** `Ascend-2.4.0.apk` from the [latest release](https://github.com/niyatinehal/Ascend/releases/latest) (release build, R8-shrunk, about 7 MB). It installs over 2.3.0. 2.3.0 and later use a new signing key, so they don't install over 2.2.0 or earlier: see [Install or update](#1-install-or-update)
 - **Min Android:** 8.0 (API 26) · **Target:** Android 15 (API 35)
 
 ---
 
 ## 1. Install or update
 
-1. Download `Ascend-2.3.0.apk` from the [latest release](https://github.com/niyatinehal/Ascend/releases/latest) on the phone (or copy it over) and open it with Files or Downloads.
+1. Download `Ascend-2.4.0.apk` from the [latest release](https://github.com/niyatinehal/Ascend/releases/latest) on the phone (or copy it over) and open it with Files or Downloads.
 2. Allow **Install unknown apps** for that app if asked, then tap **Install**. If Play Protect warns you, choose **More details → Install anyway**.
 3. **Already using 2.2.0 or earlier?** 2.3.0 is signed with a new key, so Android won't install it over the old app. Move your data across first:
    1. In the old app: **Settings → Your data → Export backup**, and save the file somewhere safe.
    2. Uninstall the old app. **Without that backup file, uninstalling erases your history.**
-   3. Install 2.3.0, then **Settings → Your data → Restore from backup** and pick the file.
+   3. Install 2.4.0, then **Settings → Your data → Restore from backup** and pick the file.
 
    Updates after 2.3.0 install normally over it.
-4. **Coming from 1.0?** Your backup restores into 2.3.0 the same way. The data is upgraded on restore:
+4. **Coming from 1.0?** Your backup restores into 2.4.0 the same way. The data is upgraded on restore:
    - tasks, completions, goals, progress and reviews are kept
    - the old categories map onto the new ones
    - you skip onboarding and land on Today
