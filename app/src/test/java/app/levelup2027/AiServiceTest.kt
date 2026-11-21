@@ -143,6 +143,37 @@ class AiServiceTest {
         assertEquals(7, (o.getValue("next_seven_days") as kotlinx.serialization.json.JsonArray).size)
         assertTrue(json.length < 6000)
     }
+
+    @Test fun `adjust context includes the routine without notes`() {
+        val today = LocalDate.of(2026, 11, 4)
+        val t = task("gym", rule = "DAILY").copy(notes = "SECRET")
+        val routine = app.levelup2027.domain.RoutineSettings(
+            presets = mapOf(PresetKind.LAZY to listOf(Block(600, 660, "Read")), PresetKind.DAILY to listOf(Block(480, 1440, "Office"))),
+            activeKind = PresetKind.LAZY, activeDate = today,
+            todayOverride = app.levelup2027.domain.DayOverride(today, PresetKind.LAZY, listOf(Block(540, 600, "Nap"))),
+        )
+        val json = ContextBuilder.adjust(today, LocalTime.of(9, 5), listOf(t), emptyList(), emptyList(), emptyList(),
+            Capacity(30, 60), false, emptySet(), emptyList(), routine)
+        assertFalse(json.contains("SECRET"))
+        val r = app.levelup2027.ai.AiJson.parseToJsonElement(json).jsonObject.getValue("routine").jsonObject
+        assertEquals("LAZY", r.getValue("active_preset").jsonPrimitive.content)
+        assertEquals("09:05", r.getValue("now").jsonPrimitive.content)
+        assertEquals("true", r.getValue("today_is_override").jsonPrimitive.content)
+        assertEquals("Nap", r.getValue("today_blocks").jsonArray.single().jsonObject.getValue("label").jsonPrimitive.content)
+        assertEquals("24:00", r.getValue("presets").jsonObject.getValue("DAILY").jsonArray.single().jsonObject.getValue("end").jsonPrimitive.content)
+    }
+
+    @Test fun `adjust understands routine changes`() = runTest {
+        secrets.put(AiService.KEY_API, "sk-ant-x")
+        val client = Scripted("""{"reply":"ok","needs_clarification":false,"question":"","changes":[
+            {"type":"SET_TODAY_BLOCKS","preset":"","blocks":[{"start":"09:00","end":"10:00","label":"Gym"}],"completion":""},
+            {"type":"COMPLETE_TASK","task_id":"gym","completion":"MINIMUM","preset":"","blocks":[]}]}""")
+        val r = service(AiSettings(mode = AiMode.OWN_KEY, consentGiven = true), client).adjust("{}")
+        assertEquals("SET_TODAY_BLOCKS", r.changes[0].type)
+        assertEquals(listOf(app.levelup2027.ai.DraftBlock("09:00", "10:00", "Gym")), r.changes[0].blocks)
+        assertEquals("MINIMUM", r.changes[1].completion)
+        assertEquals("gym", r.changes[1].taskId)
+    }
 }
 
 class AiServiceGeminiTest {

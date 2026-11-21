@@ -7,7 +7,10 @@ import app.levelup2027.data.CompletionType
 import app.levelup2027.data.Goal
 import app.levelup2027.data.Milestone
 import app.levelup2027.data.Task
+import app.levelup2027.domain.Block
 import app.levelup2027.domain.DailyPlanner
+import app.levelup2027.domain.Routine
+import app.levelup2027.domain.RoutineSettings
 import app.levelup2027.domain.ScheduleEngine
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
@@ -50,6 +53,19 @@ object ContextBuilder {
     @Serializable
     data class Adherence(val days: Int, val scheduled: Int, val ideal: Int, val minimum: Int, val skipped: Int, val notMarked: Int)
 
+    /** Times are "HH:mm"; a block ending at midnight is "24:00". */
+    @Serializable
+    data class BlockSnap(val start: String, val end: String, val label: String)
+
+    @Serializable
+    data class RoutineSnap(
+        val activePreset: String,
+        val now: String,
+        val todayBlocks: List<BlockSnap>,
+        val todayIsOverride: Boolean,
+        val presets: Map<String, List<BlockSnap>>,
+    )
+
     @Serializable
     data class AdjustInput(
         val today: String,
@@ -64,6 +80,7 @@ object ContextBuilder {
         val missedLastSevenDays: List<OccSnap>,
         val lastSevenDays: Adherence,
         val conversation: List<ChatTurn>,
+        val routine: RoutineSnap? = null,
     )
 
     @Serializable
@@ -130,6 +147,7 @@ object ContextBuilder {
     fun adjust(
         today: LocalDate, now: LocalTime, tasks: List<Task>, completions: List<Completion>, goals: List<Goal>, milestones: List<Milestone>,
         capacity: Capacity, lowEnergy: Boolean, hidden: Set<String>, conversation: List<ChatTurn>,
+        routine: RoutineSettings = RoutineSettings(),
     ): String {
         val enabled = tasks.filter { it.enabled && it.category !in hidden }
         val upcoming = (0L..6L).flatMap { ScheduleEngine.occurrencesFor(today.plusDays(it), enabled, completions) }.map(::snap)
@@ -153,7 +171,24 @@ object ContextBuilder {
                 missedLastSevenDays = missed,
                 lastSevenDays = adherence(today.minusDays(7), today.minusDays(1), enabled, completions),
                 conversation = conversation.takeLast(6),
+                routine = routineSnap(routine, today, now),
             ),
+        )
+    }
+
+    private fun hhmm(minute: Int) = "%02d:%02d".format(minute / 60, minute % 60)
+
+    private fun blockSnaps(blocks: List<Block>) = blocks.map { BlockSnap(hhmm(it.startMinute), hhmm(it.endMinute), it.label) }
+
+    private fun routineSnap(r: RoutineSettings, today: LocalDate, now: LocalTime): RoutineSnap {
+        val kind = Routine.activeKind(r, today)
+        val o = r.todayOverride
+        return RoutineSnap(
+            activePreset = kind.name,
+            now = hhmm(now.hour * 60 + now.minute),
+            todayBlocks = blockSnaps(Routine.blocksFor(r, today)),
+            todayIsOverride = o != null && o.date == today && o.kind == kind,
+            presets = r.presets.entries.associate { (k, v) -> k.name to blockSnaps(v) },
         )
     }
 
