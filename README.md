@@ -100,24 +100,6 @@ If a request fails (no network, quota, a bad response), you see why. What you ty
 
 ## 4. Daily use
 
-### Routines and block check-ins (2.4)
-- **Three presets**: Daily Routine (every day starts on it), Extreme Productive and Lazy Day. Switch any time from the top of Today; the switch lasts until midnight. Today also shows the block you're in (*Now: Gym · until 7:00*).
-- **Lazy Day** also turns on the low-energy view, so tasks show and complete as their minimum versions. Switching away turns it off.
-- **When a block ends**, a check-in shows the block (*5:00–7:00 · Gym*) and today's tasks, the ones that match the block first. Tick what you did; it's the same as ticking on Today. It fills the screen when the phone is locked and shows as a banner while you're using it.
-- **Edit presets** in Settings → Routine, where check-ins can also be turned off. On Android 14+, allow *full-screen notifications* there (or at the end of setup) so check-ins can fill the screen.
-- Upgrading from 2.3 or restoring a 2.3 backup: a card on Today offers to set up your routine; nothing is forced.
-- The AI "describe your day" option uses a new `routine` operation. **If you run the Ascend AI server, redeploy `worker/` before releasing 2.4**, or server-mode requests for it are rejected by the prompt allowlist.
-
-### Voice assistant on the widget (2.4)
-- **Tap the mic** on the home-screen widget. A small assistant window opens over the home screen and starts listening (or shows a text box if the phone has no speech recognizer). Your words appear as text; you can re-record or type.
-- **Say things like**: "switch to Lazy Day", "move my gym block to 6 to 8", "push my Spanish goal back a month", "I finished the gym", "what's left today?"
-- **Block changes are today-only** unless you say "permanently", "for good", "every day" or "from now on". The proposal says which one it is.
-- **Nothing changes until you tap Apply**, even with *Apply small changes without asking* on. Every change is listed with a tick box; untick any you don't want.
-- **Same abilities in Adjust my plan** in the app.
-- **Needs AI.** Without it the window says why and offers *Open AI settings*.
-- **Not on the lock screen**, and there are **no spoken replies**.
-- **If you run the Ascend AI server**, redeploy `worker/` before releasing 2.4 too: the Adjust prompt changed.
-
 - **Today** answers three questions at the top:
   - **What matters most today?** Highest priority, nearest deadline, and what other tasks depend on.
   - **What should I do next?** The best open task for the current time of day that isn't waiting on another task.
@@ -146,6 +128,24 @@ If a request fails (no network, quota, a bad response), you see why. What you ty
   - AI mode, key or server address, usage this month, consent
   - daily time budget, reminders, categories (rename, merge, turn off, new), widget, theme
   - backup and restore, recent plan changes, **Delete all my data**
+
+### Routines and block check-ins (2.4)
+- **Three presets**: Daily Routine (every day starts on it), Extreme Productive and Lazy Day. Switch any time from the top of Today; the switch lasts until midnight. Today also shows the block you're in (*Now: Gym · until 7:00*).
+- **Lazy Day** also turns on the low-energy view, so tasks show and complete as their minimum versions. Switching away turns it off.
+- **When a block ends**, a check-in shows the block (*5:00–7:00 · Gym*) and today's tasks, the ones that match the block first. Tick what you did; it's the same as ticking on Today. It fills the screen when the phone is locked and shows as a banner while you're using it.
+- **Edit presets** in Settings → Routine, where check-ins can also be turned off. On Android 14+, allow *full-screen notifications* there (or at the end of setup) so check-ins can fill the screen.
+- Upgrading from 2.3 or restoring a 2.3 backup: a card on Today offers to set up your routine; nothing is forced.
+- The AI "describe your day" option uses a new `routine` operation. **If you run the Ascend AI server, redeploy `worker/` before releasing 2.4**, or server-mode requests for it are rejected by the prompt allowlist.
+
+### Voice assistant on the widget (2.4)
+- **Tap the mic** on the home-screen widget. A small assistant window opens over the home screen and starts listening (or shows a text box if the phone has no speech recognizer). Your words appear as text; you can re-record or type.
+- **Say things like**: "switch to Lazy Day", "move my gym block to 6 to 8", "push my Spanish goal back a month", "I finished the gym", "what's left today?"
+- **Block changes are today-only** unless you say "permanently", "for good", "every day" or "from now on". The proposal says which one it is.
+- **Nothing changes until you tap Apply**, even with *Apply small changes without asking* on. Every change is listed with a tick box; untick any you don't want.
+- **Same abilities in Adjust my plan** in the app.
+- **Needs AI.** Without it the window says why and offers *Open AI settings* (or the consent prompt on first use).
+- **Not on the lock screen**, and there are **no spoken replies**.
+- **If you run the Ascend AI server**, the Adjust prompt changed too: redeploy `worker/` with the routine change above.
 
 ### Rules the app keeps
 - Ideal and minimum both count as done, and which one you did is recorded. Skipping is never penalised.
