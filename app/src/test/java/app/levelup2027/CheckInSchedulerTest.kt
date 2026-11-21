@@ -5,6 +5,7 @@ import app.levelup2027.domain.RoutineSettings
 import app.levelup2027.notify.CheckInScheduler
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import app.levelup2027.domain.DayOverride
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -100,5 +101,12 @@ class CheckInSchedulerTest {
         val ny = ZoneId.of("America/New_York")
         val now = ZonedDateTime.of(today.atTime(6, 0), ny)
         assertEquals(ZonedDateTime.of(today.atTime(7, 0), ny), CheckInScheduler.next(RoutineSettings(presets = daily), now)!!.at)
+    }
+
+    @Test fun `check-ins follow today's override`() {
+        val r = RoutineSettings(presets = daily, todayOverride = DayOverride(today, PresetKind.DAILY, listOf(block("06:00", "08:00", "Gym"))))
+        val p = CheckInScheduler.next(r, at("05:30"))!!
+        assertEquals(at("08:00"), p.at)
+        assertEquals("Gym", p.block.label)
     }
 }

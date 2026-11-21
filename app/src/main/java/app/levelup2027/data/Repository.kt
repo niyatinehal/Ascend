@@ -3,6 +3,7 @@ package app.levelup2027.data
 import app.levelup2027.ai.PlanChange
 import app.levelup2027.ai.PlanMaterialization
 import app.levelup2027.domain.Block
+import app.levelup2027.domain.DayOverride
 import app.levelup2027.domain.PresetKind
 import app.levelup2027.domain.Routine
 import app.levelup2027.domain.RoutineSetup
@@ -373,6 +374,14 @@ class Repository(
         val problems = Routine.validate(blocks)
         if (problems.isNotEmpty()) return problems
         updateSettings { it.copy(routine = it.routine.copy(presets = it.routine.presets + (kind to Routine.normalized(blocks)))) }
+        return emptyList()
+    }
+
+    /** Returns validation problems and stores nothing, or stores [blocks] as today's only blocks for [kind] and returns an empty list. */
+    suspend fun setTodayBlocks(today: LocalDate, kind: PresetKind, blocks: List<Block>): List<String> {
+        val problems = Routine.validate(blocks)
+        if (problems.isNotEmpty()) return problems
+        updateSettings { it.copy(routine = it.routine.copy(todayOverride = DayOverride(today, kind, Routine.normalized(blocks)))) }
         return emptyList()
     }
 

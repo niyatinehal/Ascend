@@ -105,4 +105,34 @@ class RepositoryRoutineTest {
         env.repo.toggle("gym", today, minimumByDefault = true)
         assertEquals(CompletionType.IDEAL, env.repo.toggle("gym", today, minimumByDefault = false))
     }
+
+    @Test fun `today-only blocks are validated and stored for that preset`() = runTest {
+        val env = TestEnv()
+        val bad = env.repo.setTodayBlocks(today, PresetKind.DAILY, listOf(block("05:00", "07:00", "Gym"), block("06:00", "08:00", "Run")))
+        assertTrue(bad.isNotEmpty())
+        assertNull(env.settings.current().routine.todayOverride)
+        val ok = env.repo.setTodayBlocks(today, PresetKind.DAILY, listOf(block("09:00", "10:00", " Read "), block("05:00", "07:00", "Gym")))
+        assertEquals(emptyList<String>(), ok)
+        val o = env.settings.current().routine.todayOverride!!
+        assertEquals(today, o.date)
+        assertEquals(PresetKind.DAILY, o.kind)
+        assertEquals(listOf("Gym", "Read"), o.blocks.map { it.label })
+    }
+
+    @Test fun `saving a preset keeps today's override`() = runTest {
+        val env = TestEnv()
+        env.repo.setTodayBlocks(today, PresetKind.DAILY, listOf(block("06:00", "08:00", "Gym")))
+        env.repo.savePreset(PresetKind.DAILY, listOf(block("05:00", "07:00", "Gym")))
+        assertEquals("Gym", env.settings.current().routine.todayOverride!!.blocks.single().label)
+        assertEquals(minuteOf("06:00"), env.settings.current().routine.todayOverride!!.blocks.single().startMinute)
+    }
+
+    @Test fun `a new today-only change replaces the old one`() = runTest {
+        val env = TestEnv()
+        env.repo.setTodayBlocks(today, PresetKind.DAILY, listOf(block("06:00", "08:00", "Gym")))
+        env.repo.setTodayBlocks(today, PresetKind.LAZY, listOf(block("10:00", "11:00", "Nap")))
+        val o = env.settings.current().routine.todayOverride!!
+        assertEquals(PresetKind.LAZY, o.kind)
+        assertEquals(listOf("Nap"), o.blocks.map { it.label })
+    }
 }

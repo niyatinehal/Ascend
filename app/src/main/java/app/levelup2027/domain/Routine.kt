@@ -21,6 +21,14 @@ enum class RoutineSetup { REQUIRED, PROMPT, DONE }
 @Serializable
 data class Block(val startMinute: Int, val endMinute: Int, val label: String)
 
+/** Blocks for one preset on one date only. Never touches the saved preset; stale once [date] has passed. */
+@Serializable
+data class DayOverride(
+    @Serializable(with = LocalDateSerializer::class) val date: LocalDate,
+    val kind: PresetKind,
+    val blocks: List<Block>,
+)
+
 @Serializable
 data class RoutineSettings(
     val presets: Map<PresetKind, List<Block>> = emptyMap(),
@@ -30,6 +38,7 @@ data class RoutineSettings(
     val checkInsEnabled: Boolean = true,
     val setup: RoutineSetup = RoutineSetup.REQUIRED,
     val promptDismissed: Boolean = false,
+    val todayOverride: DayOverride? = null,
 )
 
 object Routine {
@@ -61,7 +70,11 @@ object Routine {
 
     fun activeKind(r: RoutineSettings, date: LocalDate): PresetKind = if (r.activeDate == date) r.activeKind else PresetKind.DAILY
 
-    fun blocksFor(r: RoutineSettings, date: LocalDate): List<Block> = r.presets[activeKind(r, date)].orEmpty()
+    fun blocksFor(r: RoutineSettings, date: LocalDate): List<Block> {
+        val kind = activeKind(r, date)
+        val o = r.todayOverride
+        return if (o != null && o.date == date && o.kind == kind) o.blocks else r.presets[kind].orEmpty()
+    }
 
     fun currentBlock(blocks: List<Block>, minute: Int): Block? = blocks.firstOrNull { minute >= it.startMinute && minute < it.endMinute }
 

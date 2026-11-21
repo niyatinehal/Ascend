@@ -9,6 +9,7 @@ import app.levelup2027.domain.RoutineSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import app.levelup2027.domain.DayOverride
 import org.junit.Test
 import java.time.LocalDate
 
@@ -105,5 +106,25 @@ class RoutineTest {
         assertEquals("5:00", Routine.format(300))
         assertEquals("19:30", Routine.format(1170))
         assertEquals("0:00", Routine.format(1440))
+    }
+
+    private val ovDaily = listOf(block("06:00", "08:00", "Gym"))
+    private val withPresets = RoutineSettings(presets = mapOf(PresetKind.DAILY to listOf(block("05:00", "07:00", "Gym")), PresetKind.LAZY to listOf(block("09:00", "10:00", "Slow"))))
+
+    @Test fun `today's override replaces the preset's blocks`() {
+        val r = withPresets.copy(todayOverride = DayOverride(day, PresetKind.DAILY, ovDaily))
+        assertEquals(ovDaily, Routine.blocksFor(r, day))
+    }
+
+    @Test fun `yesterday's override is ignored`() {
+        val r = withPresets.copy(todayOverride = DayOverride(day.minusDays(1), PresetKind.DAILY, ovDaily))
+        assertEquals(withPresets.presets[PresetKind.DAILY], Routine.blocksFor(r, day))
+    }
+
+    @Test fun `override only shows for its preset`() {
+        val ov = DayOverride(day, PresetKind.DAILY, ovDaily)
+        val lazy = withPresets.copy(todayOverride = ov, activeKind = PresetKind.LAZY, activeDate = day)
+        assertEquals(withPresets.presets[PresetKind.LAZY], Routine.blocksFor(lazy, day))
+        assertEquals(ovDaily, Routine.blocksFor(lazy.copy(activeKind = PresetKind.DAILY), day))
     }
 }
