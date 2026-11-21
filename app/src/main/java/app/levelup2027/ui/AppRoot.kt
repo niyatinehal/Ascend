@@ -145,6 +145,11 @@ fun AppRoot(vm: AppViewModel, openRequests: MutableStateFlow<OpenRequest?>) {
             )
             return@CompositionLocalProvider
         }
+        // Every way of finishing onboarding sets onboardingDone, so "Your day" follows all of them.
+        if (s.routine.setup == app.levelup2027.domain.RoutineSetup.REQUIRED) {
+            app.levelup2027.ui.routine.RoutineSetupScreen(vm, required = true, onFinished = { vm.setRoutineSetup(app.levelup2027.domain.RoutineSetup.DONE) })
+            return@CompositionLocalProvider
+        }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { SnackbarHost(snackbar) },

@@ -20,6 +20,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import app.levelup2027.domain.Routine
+import app.levelup2027.domain.RoutineSetup
+import app.levelup2027.ui.routine.PresetSwitcher
+import app.levelup2027.ui.routine.RoutinePromptCard
+import app.levelup2027.ui.routine.RoutineSetupScreen
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -117,6 +122,7 @@ fun TodayScreen(vm: AppViewModel) {
     var moving by remember { mutableStateOf<Occurrence?>(null) }
     var showIfTime by remember { mutableStateOf(false) }
     var customising by remember { mutableStateOf(false) }
+    var settingUpRoutine by remember { mutableStateOf(false) }
     // Cards whose expanded state differs from the default (so "default expanded" can flip them all).
     var toggledCards by rememberSaveable { mutableStateOf(setOf<String>()) }
     val nav = LocalNav.current
@@ -174,6 +180,18 @@ fun TodayScreen(vm: AppViewModel) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { Header(d, onAdjust = nav.openAdjust, onCustomise = { customising = true }) }
+        if (filter == TodayFilter.TODAY) {
+            item(key = "routine") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (s.routine.setup == RoutineSetup.PROMPT && !s.routine.promptDismissed) {
+                        RoutinePromptCard(onSetUp = { settingUpRoutine = true }, onDismiss = { vm.dismissRoutinePrompt() })
+                    }
+                    if (s.routine.presets.values.any { it.isNotEmpty() }) {
+                        PresetSwitcher(Routine.activeKind(s.routine, d.date), Routine.blocksFor(s.routine, d.date)) { vm.setPreset(it) }
+                    }
+                }
+            }
+        }
         if (filter == TodayFilter.TODAY && (layout.showProgress || (layout.showFocus && d.focus.mostImportant != null))) {
             item(key = "summary") {
                 SummaryCard(
@@ -282,6 +300,14 @@ fun TodayScreen(vm: AppViewModel) {
     }
 
     if (customising) CustomiseTodaySheet(vm, s, onDismiss = { customising = false; toggledCards = emptySet() })
+    if (settingUpRoutine) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { settingUpRoutine = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        ) {
+            RoutineSetupScreen(vm, required = false, onFinished = { vm.setRoutineSetup(RoutineSetup.DONE); settingUpRoutine = false }, onClose = { settingUpRoutine = false })
+        }
+    }
 
     moving?.let { occ ->
         RescheduleDialog(occ.task.title, occ.date, d.date, onDismiss = { moving = null }) { to ->

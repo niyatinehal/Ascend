@@ -128,6 +128,7 @@ fun PresetEditorPanel(
     dailyBlocks: List<Block>,
     saveLabel: String = "Save",
     onSaved: () -> Unit,
+    requireBlocks: Boolean = false,
     describe: (@Composable (setBlocks: (List<Block>, List<String>) -> Unit) -> Unit)? = null,
 ) {
     var blocks by remember(kind) { mutableStateOf(saved) }
@@ -145,6 +146,10 @@ fun PresetEditorPanel(
         Button(
             onClick = {
                 scope.launch {
+                    if (requireBlocks && blocks.isEmpty()) {
+                        errors = listOf("Add at least one block.")
+                        return@launch
+                    }
                     errors = vm.savePreset(kind, blocks)
                     if (errors.isEmpty()) onSaved()
                 }
