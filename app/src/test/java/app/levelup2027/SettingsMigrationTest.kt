@@ -54,6 +54,16 @@ class SettingsMigrationTest {
         assertEquals(RoutineSetup.PROMPT, restored.routine.setup)
     }
 
+    @Test fun `unmigrated 2_3 settings never show the forced setup`() {
+        val full = Json.parseToJsonElement(SettingsJson.encodeToString(AppSettings.serializer(), AppSettings(settingsVersion = 4, onboardingDone = true))).jsonObject
+        val stored = SettingsJson.decodeFromString(AppSettings.serializer(), JsonObject(full - "routine").toString())
+        assertFalse(stored.mustSetUpRoutine)
+    }
+
+    @Test fun `a migrated new user must set up the routine after onboarding`() {
+        assertTrue(AppSettings().migrated().copy(onboardingDone = true).mustSetUpRoutine)
+    }
+
     @Test fun `already migrated settings are untouched`() {
         val s = AppSettings(settingsVersion = AppSettings.CURRENT_VERSION, routine = RoutineSettings(setup = RoutineSetup.DONE))
         assertEquals(RoutineSetup.DONE, s.migrated().routine.setup)

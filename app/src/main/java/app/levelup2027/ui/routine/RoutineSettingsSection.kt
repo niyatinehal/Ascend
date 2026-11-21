@@ -1,6 +1,12 @@
 package app.levelup2027.ui.routine
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import app.levelup2027.notify.Notifications
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -82,13 +88,35 @@ fun PresetEditorSheet(vm: AppViewModel, kind: PresetKind, onDismiss: () -> Unit)
     }
 }
 
-/** Shown only when Android 14+ has full-screen notifications turned off for Ascend. */
+/**
+ * What check-ins still need: notification permission (without it nothing is shown at all), then
+ * full-screen notifications on Android 14+. Shows nothing when both are allowed.
+ */
 @Composable
 fun CheckInPermissionRow() {
     val context = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) { tick++; onPauseOrDispose { } }
+    val canNotify = remember(tick) { Notifications.canPost(context) }
     val allowed = remember(tick) { CheckInNotifications.canUseFullScreen(context) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { tick++ }
+    if (!canNotify) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Notifications are off for Ascend, so check-ins can't appear.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = {
+                val granted = Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                if (Build.VERSION.SDK_INT >= 33 && !granted) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                else context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            }) { Text("Allow") }
+        }
+        return
+    }
     if (allowed || Build.VERSION.SDK_INT < 34) return
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(

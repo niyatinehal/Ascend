@@ -31,8 +31,40 @@ class CheckInSchedulerTest {
         assertNull(CheckInScheduler.next(RoutineSettings(), at("06:00")))
     }
 
-    @Test fun `nothing when all blocks have ended`() {
-        assertNull(CheckInScheduler.next(RoutineSettings(presets = daily), at("10:00")))
+    @Test fun `after today's last block, tomorrow's first Daily block is armed`() {
+        val p = CheckInScheduler.next(RoutineSettings(presets = daily), at("10:00"))!!
+        assertEquals("Gym", p.block.label)
+        assertEquals(today.plusDays(1), p.date)
+        assertEquals(at("07:00", today.plusDays(1)), p.at)
+    }
+
+    @Test fun `tomorrow always starts on Daily even after a Lazy switch today`() {
+        val r = RoutineSettings(presets = daily + (PresetKind.LAZY to listOf(block("06:00", "09:00", "Slow"))), activeKind = PresetKind.LAZY, activeDate = today)
+        val p = CheckInScheduler.next(r, at("09:30"))!!
+        assertEquals("Gym", p.block.label)
+        assertEquals(today.plusDays(1), p.date)
+    }
+
+    @Test fun `nothing when today is done and Daily is empty`() {
+        val r = RoutineSettings(presets = mapOf(PresetKind.LAZY to listOf(block("06:00", "09:00", "Slow"))), activeKind = PresetKind.LAZY, activeDate = today)
+        assertNull(CheckInScheduler.next(r, at("09:30")))
+    }
+
+    @Test fun `autumn clock change still fires at wall-clock end, once`() {
+        val ny = ZoneId.of("America/New_York")
+        val fallBack = LocalDate.of(2026, 11, 1)
+        val now = ZonedDateTime.of(fallBack.atTime(6, 0), ny)
+        val p = CheckInScheduler.next(RoutineSettings(presets = daily), now)!!
+        assertEquals(ZonedDateTime.of(fallBack.atTime(7, 0), ny), p.at)
+        // Firing at 07:00 moves on to the next block instead of re-arming Gym.
+        assertEquals("Read", CheckInScheduler.next(RoutineSettings(presets = daily), p.at)!!.block.label)
+    }
+
+    @Test fun `spring clock change fires at wall-clock end`() {
+        val ny = ZoneId.of("America/New_York")
+        val springForward = LocalDate.of(2026, 3, 8)
+        val now = ZonedDateTime.of(springForward.atTime(4, 0), ny)
+        assertEquals(ZonedDateTime.of(springForward.atTime(7, 0), ny), CheckInScheduler.next(RoutineSettings(presets = daily), now)!!.at)
     }
 
     @Test fun `a block ending exactly now is not armed again`() {

@@ -125,6 +125,13 @@ data class AppSettings(
     fun isLowEnergy(today: LocalDate) = lowEnergyDate == today
 
     /**
+     * True when "Your day" must be shown before the app. Settings stored by 2.3 decode with the
+     * default REQUIRED until migrated, so unmigrated settings never count.
+     */
+    val mustSetUpRoutine: Boolean
+        get() = onboardingDone && settingsVersion >= CURRENT_VERSION && routine.setup == RoutineSetup.REQUIRED
+
+    /**
      * Upgrades settings written by v1. Pure so it can be tested; disabling legacy categories on the
      * category rows is done by the repository from [legacyDisabledCategoryIds].
      */

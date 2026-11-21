@@ -55,14 +55,25 @@ object CheckInScheduler {
     const val EXTRA_END = "checkin_end"
     const val EXTRA_LABEL = "checkin_label"
 
-    /** Pure. Null when check-ins are off, today's preset is empty, or every block has ended. */
+    /**
+     * Pure. The next block end in today's active preset; once today is done, the first block of
+     * tomorrow's Daily Routine (every day starts on it), so the morning's first check-in doesn't
+     * depend on the inexact midnight alarm. Null when check-ins are off or nothing is left to arm.
+     */
     fun next(r: RoutineSettings, now: ZonedDateTime): PendingCheckIn? {
         if (!r.checkInsEnabled) return null
         val date = now.toLocalDate()
         val minute = now.hour * 60 + now.minute
-        val block = Routine.nextEnding(Routine.blocksFor(r, date), minute) ?: return null
-        return PendingCheckIn(date, block, date.atStartOfDay(now.zone).plusMinutes(block.endMinute.toLong()))
+        Routine.nextEnding(Routine.blocksFor(r, date), minute)?.let { return PendingCheckIn(date, it, endOf(date, it, now.zone)) }
+        val tomorrow = date.plusDays(1)
+        val first = Routine.nextEnding(Routine.blocksFor(r, tomorrow), -1) ?: return null
+        return PendingCheckIn(tomorrow, first, endOf(tomorrow, first, now.zone))
     }
+
+    /** Wall-clock end time, so clock changes don't shift it. 24:00 is the next day's midnight. */
+    private fun endOf(date: LocalDate, block: Block, zone: ZoneId): ZonedDateTime =
+        if (block.endMinute >= 1440) date.plusDays(1).atStartOfDay(zone)
+        else date.atTime(java.time.LocalTime.of(block.endMinute / 60, block.endMinute % 60)).atZone(zone)
 
     fun schedule(context: Context, s: AppSettings) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
