@@ -1,7 +1,13 @@
 package app.levelup2027
 
 import app.levelup2027.data.AppSettings
+import app.levelup2027.data.SettingsJson
 import app.levelup2027.data.TodayLayout
+import app.levelup2027.domain.RoutineSettings
+import app.levelup2027.domain.RoutineSetup
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,5 +31,31 @@ class SettingsMigrationTest {
 
     @Test fun `a fresh install starts without filter chips`() {
         assertFalse(AppSettings().migrated().todayLayout.showFilters)
+    }
+
+    @Test fun `a fresh install must set up its routine`() {
+        assertEquals(RoutineSetup.REQUIRED, AppSettings().migrated().routine.setup)
+    }
+
+    @Test fun `upgrading an onboarded 2_3 user gets the prompt`() {
+        assertEquals(RoutineSetup.PROMPT, AppSettings(settingsVersion = 4, onboardingDone = true).migrated().routine.setup)
+    }
+
+    @Test fun `upgrading a v1 user gets the prompt`() {
+        assertEquals(RoutineSetup.PROMPT, AppSettings(settingsVersion = 0, seedVersion = 1).migrated().routine.setup)
+    }
+
+    @Test fun `restored 2_3 settings get the prompt, not the forced setup`() {
+        val full = Json.parseToJsonElement(SettingsJson.encodeToString(AppSettings.serializer(), AppSettings(settingsVersion = 4, onboardingDone = true))).jsonObject
+        val v23File = JsonObject(full - "routine").toString() // a 2.3 file has no "routine"
+
+        val restored = SettingsJson.decodeFromString(AppSettings.serializer(), v23File).migrated()
+
+        assertEquals(RoutineSetup.PROMPT, restored.routine.setup)
+    }
+
+    @Test fun `already migrated settings are untouched`() {
+        val s = AppSettings(settingsVersion = AppSettings.CURRENT_VERSION, routine = RoutineSettings(setup = RoutineSetup.DONE))
+        assertEquals(RoutineSetup.DONE, s.migrated().routine.setup)
     }
 }

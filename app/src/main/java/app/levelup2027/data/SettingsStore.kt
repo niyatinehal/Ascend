@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.levelup2027.domain.WidgetConfig
 import app.levelup2027.domain.WidgetMode
+import app.levelup2027.domain.RoutineSetup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -119,6 +120,7 @@ data class AppSettings(
     val promptTemplates: List<app.levelup2027.ai.PromptTemplate>? = null,
     val todayLayout: TodayLayout = TodayLayout(),
     val cardLayout: CardLayout = CardLayout(),
+    val routine: app.levelup2027.domain.RoutineSettings = app.levelup2027.domain.RoutineSettings(),
 ) {
     fun isLowEnergy(today: LocalDate) = lowEnergyDate == today
 
@@ -143,13 +145,17 @@ data class AppSettings(
         }
         // 2.3 opens Today without filter chips so the list is the focus; Customise can turn them back on.
         val focused = if (settingsVersion < 4) upgraded.copy(todayLayout = upgraded.todayLayout.copy(showFilters = false)) else upgraded
-        return focused.copy(settingsVersion = CURRENT_VERSION)
+        // 2.4 adds routines: people already using the app get a prompt; new installs set one up during onboarding.
+        val routined = if (settingsVersion < 5) {
+            focused.copy(routine = focused.routine.copy(setup = if (focused.onboardingDone) RoutineSetup.PROMPT else RoutineSetup.REQUIRED))
+        } else focused
+        return routined.copy(settingsVersion = CURRENT_VERSION)
     }
 
     val legacyDisabledCategoryIds: Set<String>
         get() = legacyEnabledCategories?.let { enabled -> (Cat.LEGACY.keys - enabled).map(Cat::fromLegacy).toSet() } ?: emptySet()
 
-    companion object { const val CURRENT_VERSION = 4 }
+    companion object { const val CURRENT_VERSION = 5 }
 }
 
 interface SettingsSource {
