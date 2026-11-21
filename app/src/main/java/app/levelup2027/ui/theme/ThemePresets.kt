@@ -70,11 +70,11 @@ private class PresetColors(val dark: Accents, val light: Accents)
 
 object ThemePresets {
     private val presets = mapOf(
-        ThemePreset.OCEAN to PresetColors(Accents(0xFF6FA8F0, 0xFFE9A06B), Accents(0xFF2B5EA8, 0xFF9A5418)),
-        ThemePreset.FOREST to PresetColors(Accents(0xFF7CC47F, 0xFFB7A0E8), Accents(0xFF2E7333, 0xFF6A4FB0)),
-        ThemePreset.ROSE to PresetColors(Accents(0xFFEC8FAE, 0xFF7CC9B0), Accents(0xFFB0386A, 0xFF2B735C)),
-        ThemePreset.LAVENDER to PresetColors(Accents(0xFFB59BF2, 0xFFE8C46A), Accents(0xFF6A4CC2, 0xFF8A6200)),
-        ThemePreset.EMBER to PresetColors(Accents(0xFFF08A5D, 0xFF6FB8E0), Accents(0xFFB34A1C, 0xFF256E96)),
+        ThemePreset.OCEAN to PresetColors(Accents(0xFF6FA8F0, 0xFFE9A06B), Accents(0xFF2B5EA8, 0xFF914F17)),
+        ThemePreset.FOREST to PresetColors(Accents(0xFF7CC47F, 0xFFB7A0E8), Accents(0xFF2C6D30, 0xFF694EAE)),
+        ThemePreset.ROSE to PresetColors(Accents(0xFFEC8FAE, 0xFF7CC9B0), Accents(0xFFA73565, 0xFF286B56)),
+        ThemePreset.LAVENDER to PresetColors(Accents(0xFFB59BF2, 0xFFE8C46A), Accents(0xFF684ABE, 0xFF7E5900)),
+        ThemePreset.EMBER to PresetColors(Accents(0xFFF08A5D, 0xFF6FB8E0), Accents(0xFFA14319, 0xFF22668C)),
     )
 
     fun scheme(preset: ThemePreset, dark: Boolean): ColorScheme {

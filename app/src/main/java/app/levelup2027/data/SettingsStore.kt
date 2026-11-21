@@ -172,7 +172,8 @@ interface SettingsSource {
     suspend fun update(transform: (AppSettings) -> AppSettings)
 }
 
-val SettingsJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+// coerceInputValues: an enum value from a newer version (e.g. a theme this build lacks) becomes the default instead of failing the whole decode.
+val SettingsJson = Json { ignoreUnknownKeys = true; encodeDefaults = true; coerceInputValues = true }
 
 private val Context.dataStore by preferencesDataStore("settings")
 

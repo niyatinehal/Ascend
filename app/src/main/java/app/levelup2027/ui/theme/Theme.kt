@@ -45,9 +45,9 @@ import app.levelup2027.data.TimeSlot
 
 object Palette {
     val Gold = Color(0xFFE8B44C)       // ideal / accent
-    val GoldDeep = Color(0xFF946600)   // 4.6:1 on the light background
+    val GoldDeep = Color(0xFF7F5800)   // ≥4.5:1 on every light surface, dialogs included
     val Teal = Color(0xFF5DBBA6)       // minimum
-    val TealDeep = Color(0xFF2D7A6A)   // 4.7:1 on the light background
+    val TealDeep = Color(0xFF286B5D)   // ≥4.5:1 on every light surface, dialogs included
     val Bg = Color(0xFF0F1115)
     val Surface = Color(0xFF171A21)
     val SurfaceHigh = Color(0xFF1F232C)

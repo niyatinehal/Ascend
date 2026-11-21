@@ -21,8 +21,8 @@ class ThemePresetsTest {
         assertEquals(Color(0xFF1F232C), d.surfaceContainerHigh)
         assertEquals(Color(0xFFE6E8EE), d.onBackground)
         val l = ThemePresets.scheme(ThemePreset.GOLD, dark = false)
-        assertEquals(Color(0xFF946600), l.primary)
-        assertEquals(Color(0xFF2D7A6A), l.secondary)
+        assertEquals(Color(0xFF7F5800), l.primary)
+        assertEquals(Color(0xFF286B5D), l.secondary)
         assertEquals(Color(0xFFF6F5F2), l.background)
         assertEquals(Color.White, l.surfaceContainer)
     }
@@ -31,10 +31,14 @@ class ThemePresetsTest {
         for (p in ThemePreset.entries) for (dark in listOf(true, false)) {
             val s = ThemePresets.scheme(p, dark)
             val v = if (dark) "dark" else "light"
-            val cp = ThemePresets.contrast(s.primary, s.background)
-            val cs = ThemePresets.contrast(s.secondary, s.background)
-            assertTrue("$p $v primary contrast $cp", cp >= 4.5)
-            assertTrue("$p $v secondary contrast $cs", cs >= 4.5)
+            // Pages, cards and dialogs: accents must read on every surface they sit on.
+            val surfaces = mapOf("background" to s.background, "surfaceContainer" to s.surfaceContainer, "surfaceContainerHigh" to s.surfaceContainerHigh, "surfaceContainerHighest" to s.surfaceContainerHighest)
+            for ((name, bg) in surfaces) {
+                val cp = ThemePresets.contrast(s.primary, bg)
+                val cs = ThemePresets.contrast(s.secondary, bg)
+                assertTrue("$p $v primary on $name contrast $cp", cp >= 4.5)
+                assertTrue("$p $v secondary on $name contrast $cs", cs >= 4.5)
+            }
         }
     }
 
@@ -71,5 +75,13 @@ class ThemePresetsTest {
         assertEquals(s.onBackground, w.text)
         assertEquals(s.onSurfaceVariant, w.muted)
         assertEquals(Color(0xFF1F232C), ThemePresets.widget(ThemePreset.GOLD).surfaceHigh)
+    }
+
+    @Test fun `an unknown preset from a newer version falls back to Gold without losing other settings`() {
+        val json = SettingsJson.encodeToString(AppSettings.serializer(), AppSettings(themePreset = ThemePreset.ROSE, onboardingDone = true))
+            .replace("\"ROSE\"", "\"AURORA\"")
+        val s = SettingsJson.decodeFromString(AppSettings.serializer(), json)
+        assertEquals(ThemePreset.GOLD, s.themePreset)
+        assertTrue(s.onboardingDone)
     }
 }
