@@ -1,0 +1,85 @@
+{
+  "title": "Ascend",
+  "subtitle": "An Android goal planner with an AI coach, x-rayed from its code: phone, widget, AI server and the models behind it.",
+  "flows": [
+    {
+      "from": "flow:plan:server",
+      "title": "Claude drafts your plan via the Ascend AI server",
+      "caption": "Plan builder \u2192 AI layer \u2192 Worker checks device & quota in KV \u2192 Claude \u2192 draft saved on the phone",
+      "hideBranches": [
+        "failure"
+      ]
+    },
+    {
+      "from": "flow:intake:gemini",
+      "title": "Gemini reads your goals and asks up to three questions",
+      "caption": "Plan builder \u2192 AI layer checks the shared-key cap \u2192 Gemini straight from the phone \u2192 answers saved",
+      "hideBranches": [
+        "failure"
+      ]
+    },
+    {
+      "from": "flow:plan:accept",
+      "title": "You accept the plan and it lands on your schedule",
+      "caption": "One Room transaction writes goals and tasks, then the widget refreshes and reminders are rescheduled",
+      "hideBranches": [
+        "failure"
+      ]
+    },
+    {
+      "from": "flow:widget:toggle",
+      "title": "You tick off a task from the home-screen widget",
+      "caption": "Widget \u2192 Repository picks ideal or minimum \u2192 completion saved \u2192 widget redraws",
+      "hideBranches": [
+        "failure"
+      ]
+    }
+  ],
+  "traffic": {
+    "baseRps": 2,
+    "maxMultiplier": 20,
+    "flowMix": {
+      "flow:plan:server": 1,
+      "flow:intake:gemini": 2,
+      "flow:plan:accept": 1,
+      "flow:widget:toggle": 12
+    }
+  },
+  "estimates": {
+    "note": "Hop latencies are estimates, not measurements. AI latencies come from the repo's own notes (GeminiClient.kt timings, 'under a minute' plan copy).",
+    "hopMs": {
+      "http": 35,
+      "call": 1,
+      "db-read": 3,
+      "db-write": 8,
+      "emit": 2,
+      "deliver": 12,
+      "enqueue": 3,
+      "consume": 25,
+      "partner": 400
+    },
+    "serviceCapacityRps": {
+      "service:ui": 200,
+      "service:ai": 50,
+      "service:data": 300,
+      "service:widget": 100,
+      "service:reminders": 100,
+      "service:worker": 50
+    },
+    "partnerLatencyMs": {
+      "partner:anthropic": 30000,
+      "partner:gemini": 3000
+    },
+    "partnerRetries": {
+      "partner:anthropic": 1,
+      "partner:gemini": 3
+    }
+  },
+  "redact": false,
+  "assumptions": [
+    "Anthropic timeout is the phone's 90 s read timeout (AiService.kt:102); the Worker sets none of its own.",
+    "Anthropic counts as one attempt: the Worker's SDK may retry (default maxRetries 2), but the phone stops waiting after its single 90 s read timeout.",
+    "Gemini down = 3 attempts \u00d7 90 s: a read timeout becomes a 504 (AiClient.kt:256) and the loop moves to the next of 3 intake models (GeminiClient.kt:73, :119).",
+    "Traffic is illustrative: the Worker caps the whole server at 2000 requests/day (wrangler.toml)."
+  ]
+}

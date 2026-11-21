@@ -1,0 +1,542 @@
+{
+  "version": 2,
+  "repo": "Ascend",
+  "stats": {
+    "files": 48
+  },
+  "nodes": [
+    {
+      "id": "external:client",
+      "kind": "external",
+      "label": "You (phone)"
+    },
+    {
+      "id": "service:ui",
+      "kind": "service",
+      "label": "Screens",
+      "path": "app/src/main/java/app/levelup2027/ui",
+      "domains": [
+        "Plan builder",
+        "Today",
+        "Adjust"
+      ]
+    },
+    {
+      "id": "service:ai",
+      "kind": "service",
+      "label": "AI layer",
+      "path": "app/src/main/java/app/levelup2027/ai",
+      "domains": [
+        "AiService",
+        "Clients",
+        "Validators"
+      ]
+    },
+    {
+      "id": "service:data",
+      "kind": "service",
+      "label": "Repository",
+      "path": "app/src/main/java/app/levelup2027/data"
+    },
+    {
+      "id": "service:widget",
+      "kind": "service",
+      "label": "Home-screen widget",
+      "path": "app/src/main/java/app/levelup2027/widget"
+    },
+    {
+      "id": "service:reminders",
+      "kind": "service",
+      "label": "Reminders",
+      "path": "app/src/main/java/app/levelup2027/notify"
+    },
+    {
+      "id": "service:worker",
+      "kind": "service",
+      "label": "AI server (Worker)",
+      "path": "worker",
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/v1/register",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 238
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/ai",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 239
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/usage",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 240
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/device",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 241
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/usage",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 242
+          }
+        }
+      ]
+    },
+    {
+      "id": "db:sql",
+      "kind": "database",
+      "label": "Room (SQLite on phone)",
+      "models": [
+        "Task",
+        "Completion",
+        "Goal",
+        "PlanDraft",
+        "AiUsage"
+      ]
+    },
+    {
+      "id": "db:kv",
+      "kind": "database",
+      "label": "Cloudflare KV"
+    },
+    {
+      "id": "partner:anthropic",
+      "kind": "partner",
+      "label": "Anthropic Claude",
+      "timeoutMs": 90000,
+      "evidence": {
+        "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+        "line": 102
+      }
+    },
+    {
+      "id": "partner:gemini",
+      "kind": "partner",
+      "label": "Google Gemini",
+      "timeoutMs": 90000,
+      "evidence": {
+        "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+        "line": 102
+      }
+    }
+  ],
+  "candidateFlows": [
+    {
+      "id": "flow:plan:server",
+      "title": "Claude drafts a plan via the AI server",
+      "steps": [
+        {
+          "from": "external:client",
+          "to": "service:ui",
+          "kind": "http",
+          "label": "generate()",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 141
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "persist answersJson",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 147
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "service:ai",
+          "kind": "call",
+          "label": "ai.generatePlan",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 153
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "service:worker",
+          "kind": "http",
+          "label": "POST /v1/ai",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/AiClient.kt",
+            "line": 198
+          }
+        },
+        {
+          "from": "service:worker",
+          "to": "db:kv",
+          "kind": "db-read",
+          "label": "USAGE.get dev:token",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 82
+          }
+        },
+        {
+          "from": "service:worker",
+          "to": "db:kv",
+          "kind": "db-read",
+          "label": "usageOf quotas",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 120
+          }
+        },
+        {
+          "from": "service:worker",
+          "to": "db:kv",
+          "kind": "db-write",
+          "label": "USAGE.put daily count",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 131
+          }
+        },
+        {
+          "from": "service:worker",
+          "to": "partner:anthropic",
+          "kind": "partner",
+          "label": "client.messages.create",
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 142
+          }
+        },
+        {
+          "from": "service:worker",
+          "to": "db:kv",
+          "kind": "db-write",
+          "label": "waitUntil(record) tokens",
+          "async": true,
+          "evidence": {
+            "file": "worker/src/index.js",
+            "line": 178
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "usage.insert AiUsage",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+            "line": 227
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "service:ai",
+          "kind": "call",
+          "label": "PlanValidator.validate",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 106
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "persist draftJson",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 160
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "usage.insert failed AiUsage",
+          "branch": "failure",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+            "line": 224
+          }
+        }
+      ]
+    },
+    {
+      "id": "flow:intake:gemini",
+      "title": "Gemini reads your goals and asks follow-ups",
+      "steps": [
+        {
+          "from": "external:client",
+          "to": "service:ui",
+          "kind": "http",
+          "label": "submitDescription()",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 122
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "persist inputText",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 127
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "service:ai",
+          "kind": "call",
+          "label": "ai.intake",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 130
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "db:sql",
+          "kind": "db-read",
+          "label": "usageThisMonth shared cap",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+            "line": 184
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "partner:gemini",
+          "kind": "partner",
+          "label": "models/:generateContent",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/GeminiClient.kt",
+            "line": 115
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "usage.insert AiUsage",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+            "line": 227
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "persist intakeJson",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 132
+          }
+        },
+        {
+          "from": "service:ai",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "usage.insert failed AiUsage",
+          "branch": "failure",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ai/AiService.kt",
+            "line": 224
+          }
+        }
+      ]
+    },
+    {
+      "id": "flow:plan:accept",
+      "title": "You accept the plan",
+      "steps": [
+        {
+          "from": "external:client",
+          "to": "service:ui",
+          "kind": "http",
+          "label": "accept()",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 203
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "service:ai",
+          "kind": "call",
+          "label": "materializer.materialize",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 205
+          }
+        },
+        {
+          "from": "service:ui",
+          "to": "service:data",
+          "kind": "call",
+          "label": "repo.acceptPlan",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/ui/plan/PlanViewModels.kt",
+            "line": 207
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "goalDao.insertGoalsIfAbsent",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 289
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "taskDao.insertIfAbsent",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 292
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "planDao.log PLAN_ACCEPTED",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 295
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "service:widget",
+          "kind": "call",
+          "label": "WidgetUpdater.refresh",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/LevelUpApp.kt",
+            "line": 50
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "service:reminders",
+          "kind": "call",
+          "label": "ReminderScheduler.scheduleAll",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/LevelUpApp.kt",
+            "line": 52
+          }
+        }
+      ]
+    },
+    {
+      "id": "flow:widget:toggle",
+      "title": "You tick off a task on the widget",
+      "steps": [
+        {
+          "from": "external:client",
+          "to": "service:widget",
+          "kind": "http",
+          "label": "ToggleTaskAction.onAction",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/widget/LevelUpWidget.kt",
+            "line": 94
+          }
+        },
+        {
+          "from": "service:widget",
+          "to": "service:data",
+          "kind": "call",
+          "label": "repository.toggleFromWidget",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/widget/LevelUpWidget.kt",
+            "line": 97
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-read",
+          "label": "completionDao.get",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 183
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-read",
+          "label": "taskDao.get",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 188
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-read",
+          "label": "planDao.overridesFor",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 190
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "db:sql",
+          "kind": "db-write",
+          "label": "completionDao.put",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/data/Repository.kt",
+            "line": 119
+          }
+        },
+        {
+          "from": "service:data",
+          "to": "service:widget",
+          "kind": "call",
+          "label": "WidgetUpdater.refresh",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/LevelUpApp.kt",
+            "line": 50
+          }
+        },
+        {
+          "from": "service:widget",
+          "to": "service:data",
+          "kind": "call",
+          "label": "repo.widgetStateNow",
+          "evidence": {
+            "file": "app/src/main/java/app/levelup2027/widget/LevelUpWidget.kt",
+            "line": 79
+          }
+        }
+      ]
+    }
+  ],
+  "unresolved": {
+    "eventsWithoutListener": [],
+    "listenersNeverTriggered": []
+  }
+}
