@@ -16,6 +16,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.levelup2027.MainActivity
 import app.levelup2027.container
 import app.levelup2027.data.ThemeChoice
+import app.levelup2027.data.ThemePreset
 import app.levelup2027.ui.AppViewModel
 import app.levelup2027.ui.plan.AdjustSheet
 import app.levelup2027.ui.plan.AdjustViewModel
@@ -49,7 +50,7 @@ class AssistantActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val settings by vm.settings.collectAsState()
-            LevelUpTheme(settings?.theme ?: ThemeChoice.DARK) {
+            LevelUpTheme(settings?.theme ?: ThemeChoice.DARK, settings?.themePreset ?: ThemePreset.GOLD) {
                 key(session.intValue) {
                     // Inside the key: a new session cancels the previous one's pending close.
                     val scope = rememberCoroutineScope()

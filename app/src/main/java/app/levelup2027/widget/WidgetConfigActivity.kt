@@ -53,7 +53,7 @@ class WidgetConfigActivity : ComponentActivity() {
             val settings by repo.settings.flow.collectAsState(initial = null)
             val categories by repo.categories.collectAsState(initial = emptyList())
             val s = settings ?: return@setContent
-            LevelUpTheme(s.theme) {
+            LevelUpTheme(s.theme, s.themePreset) {
                 var draft by remember(s.widget) { mutableStateOf(s.widget) }
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)) {

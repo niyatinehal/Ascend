@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -259,6 +260,10 @@ fun SettingsScreen(vm: AppViewModel) {
         item { GroupLabel("Personalise") }
         item {
             SectionCard(title = "Appearance") {
+                ThemeSwatches(s.themePreset, dark = MaterialTheme.colorScheme.background.luminance() < 0.5f) { p ->
+                    update(Repository.ChangeKind.OTHER) { it.copy(themePreset = p) }
+                }
+                Spacer(Modifier.size(8.dp))
                 ChipChoice(ThemeChoice.entries, s.theme, { it.label }) { t -> update(Repository.ChangeKind.OTHER) { it.copy(theme = t) } }
             }
         }

@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.levelup2027.data.ThemeChoice
+import app.levelup2027.data.ThemePreset
 import app.levelup2027.data.TimeSlot
 import app.levelup2027.ui.AppRoot
 import app.levelup2027.ui.AppViewModel
@@ -40,7 +41,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val settings by vm.settings.collectAsState()
-            LevelUpTheme(settings?.theme ?: ThemeChoice.DARK) {
+            LevelUpTheme(settings?.theme ?: ThemeChoice.DARK, settings?.themePreset ?: ThemePreset.GOLD) {
                 AppRoot(vm, openRequests)
             }
         }

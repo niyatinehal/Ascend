@@ -102,7 +102,7 @@ class RoutineScreenshots {
 
         // ---- Settings → Routine ----
         compose.onAllNodesWithText("Settings").onLast().performClick()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Block check-ins"))
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Block check-ins"))
         shot("09-settings-routine")
 
         compose.onAllNodesWithText("Daily Routine").onFirst().performClick()
@@ -141,5 +141,15 @@ class RoutineScreenshots {
         waitFor("Ascend assistant")
         shot("16-assistant-open")
         assistant.close()
+
+        // ---- Theme presets ----
+        main = ActivityScenario.launch(MainActivity::class.java)
+        compose.onAllNodesWithText("Settings").onLast().performClick()
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Personalise"))
+        shot("17-settings-appearance")
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Ocean theme")).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Ocean theme") and androidx.compose.ui.test.isSelected()).fetchSemanticsNodes().isNotEmpty() }
+        shot("18-settings-ocean")
+        main.close()
     }
 }

@@ -18,6 +18,7 @@ import app.levelup2027.data.AppSettings
 import app.levelup2027.data.DefaultMode
 import app.levelup2027.data.Repository
 import app.levelup2027.data.ThemeChoice
+import app.levelup2027.data.ThemePreset
 import app.levelup2027.domain.Block
 import app.levelup2027.domain.Routine
 import app.levelup2027.domain.ScheduleEngine
@@ -54,7 +55,7 @@ class CheckInActivity : ComponentActivity() {
         setContent {
             val inputs by data.collectAsState(initial = null)
             val (date, block) = target ?: return@setContent
-            LevelUpTheme(inputs?.settings?.theme ?: ThemeChoice.DARK) {
+            LevelUpTheme(inputs?.settings?.theme ?: ThemeChoice.DARK, inputs?.settings?.themePreset ?: ThemePreset.GOLD) {
                 val i = inputs
                 val occ = if (i == null) emptyList() else {
                     val names = i.categories.associate { it.id to it.name }
