@@ -108,6 +108,16 @@ If a request fails (no network, quota, a bad response), you see why. What you ty
 - Upgrading from 2.3 or restoring a 2.3 backup: a card on Today offers to set up your routine; nothing is forced.
 - The AI "describe your day" option uses a new `routine` operation. **If you run the Ascend AI server, redeploy `worker/` before releasing 2.4**, or server-mode requests for it are rejected by the prompt allowlist.
 
+### Voice assistant on the widget (2.4)
+- **Tap the mic** on the home-screen widget. A small assistant window opens over the home screen and starts listening (or shows a text box if the phone has no speech recognizer). Your words appear as text; you can re-record or type.
+- **Say things like**: "switch to Lazy Day", "move my gym block to 6 to 8", "push my Spanish goal back a month", "I finished the gym", "what's left today?"
+- **Block changes are today-only** unless you say "permanently", "for good", "every day" or "from now on". The proposal says which one it is.
+- **Nothing changes until you tap Apply**, even with *Apply small changes without asking* on. Every change is listed with a tick box; untick any you don't want.
+- **Same abilities in Adjust my plan** in the app.
+- **Needs AI.** Without it the window says why and offers *Open AI settings*.
+- **Not on the lock screen**, and there are **no spoken replies**.
+- **If you run the Ascend AI server**, redeploy `worker/` before releasing 2.4 too: the Adjust prompt changed.
+
 - **Today** answers three questions at the top:
   - **What matters most today?** Highest priority, nearest deadline, and what other tasks depend on.
   - **What should I do next?** The best open task for the current time of day that isn't waiting on another task.
