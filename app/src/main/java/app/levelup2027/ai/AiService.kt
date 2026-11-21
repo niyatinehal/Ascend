@@ -8,6 +8,9 @@ import app.levelup2027.data.AiMode
 import app.levelup2027.data.AiUsage
 import app.levelup2027.data.AiUsageDao
 import app.levelup2027.data.SettingsSource
+import app.levelup2027.domain.Block
+import app.levelup2027.domain.PresetKind
+import app.levelup2027.domain.Routine
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import java.security.KeyStore
@@ -241,6 +244,42 @@ class AiService(
     suspend fun planWeek(payload: String): WeekPlan =
         run(AiOperation.WEEK, Prompts.WEEK, listOf(ChatTurn("user", payload)), Schemas.week, WeekPlan.serializer())
 
+    /**
+     * Drafts blocks for one preset from the person's own words. Never saves: unparseable or
+     * overlapping blocks are dropped and described in [RoutineResult.problems] for the editor.
+     */
+    suspend fun draftRoutine(kind: PresetKind, text: String): RoutineResult {
+        val draft = run(AiOperation.ROUTINE, Prompts.ROUTINE, listOf(ChatTurn("user", ContextBuilder.routine(kind.label, text))), Schemas.routine, RoutineDraft.serializer())
+        return RoutineResult.from(draft)
+    }
+
     suspend fun adjust(payload: String): AdjustResult =
         run(AiOperation.ADJUST, Prompts.ADJUST, listOf(ChatTurn("user", payload)), Schemas.adjust, AdjustResult.serializer())
+}
+
+data class RoutineResult(val blocks: List<Block>, val problems: List<String>) {
+    companion object {
+        private fun minute(hhmm: String): Int? {
+            val m = Regex("""^(\d{1,2}):(\d{2})$""").matchEntire(hhmm.trim()) ?: return null
+            val h = m.groupValues[1].toInt(); val min = m.groupValues[2].toInt()
+            if (min > 59 || h > 24 || (h == 24 && min != 0)) return null
+            return h * 60 + min
+        }
+
+        fun from(draft: RoutineDraft): RoutineResult {
+            val kept = mutableListOf<Block>()
+            val problems = mutableListOf<String>()
+            for (d in draft.blocks) {
+                val name = d.label.trim().ifBlank { "A block" }
+                val start = minute(d.start)
+                val end = minute(d.end)
+                if (start == null || end == null) { problems += "Couldn't read the time for $name."; continue }
+                val b = Block(start, end, d.label.trim().take(Routine.MAX_LABEL))
+                val issue = Routine.validate(kept + b).firstOrNull()
+                if (issue != null) { problems += issue; continue }
+                kept += b
+            }
+            return RoutineResult(Routine.normalized(kept), problems)
+        }
+    }
 }

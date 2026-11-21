@@ -2,6 +2,9 @@ package app.levelup2027
 
 import app.levelup2027.ai.AiAvailability
 import app.levelup2027.ai.AiClient
+import app.levelup2027.ai.AiOperation
+import app.levelup2027.domain.Block
+import app.levelup2027.domain.PresetKind
 import app.levelup2027.ai.AiError
 import app.levelup2027.ai.AiRequest
 import app.levelup2027.ai.AiResponse
@@ -78,6 +81,42 @@ class AiServiceTest {
         val third = runCatching { s.intake(LocalDate.now(), "third") }
         assertTrue(third.exceptionOrNull() is AiError.QuotaExceeded)
         assertEquals(2, c.calls.size)
+    }
+
+    @Test fun `routine draft is parsed into blocks`() = runTest {
+        secrets.put(AiService.KEY_API, "sk-ant-x")
+        val client = Scripted("""{"blocks":[{"start":"05:00","end":"07:00","label":"Gym"}]}""")
+        val r = service(AiSettings(mode = AiMode.OWN_KEY, consentGiven = true), client).draftRoutine(PresetKind.DAILY, "gym 5 to 7")
+        assertEquals(listOf(Block(300, 420, "Gym")), r.blocks)
+        assertEquals(emptyList<String>(), r.problems)
+        assertEquals(AiOperation.ROUTINE, client.calls.single().op)
+    }
+
+    @Test fun `routine draft accepts a midnight end`() = runTest {
+        secrets.put(AiService.KEY_API, "sk-ant-x")
+        val client = Scripted("""{"blocks":[{"start":"22:00","end":"24:00","label":"Wind down"}]}""")
+        val r = service(AiSettings(mode = AiMode.OWN_KEY, consentGiven = true), client).draftRoutine(PresetKind.DAILY, "x")
+        assertEquals(listOf(Block(1320, 1440, "Wind down")), r.blocks)
+    }
+
+    @Test fun `bad times and overlaps are reported, not kept`() = runTest {
+        secrets.put(AiService.KEY_API, "sk-ant-x")
+        val client = Scripted("""{"blocks":[
+            {"start":"05:00","end":"07:00","label":"Gym"},
+            {"start":"06:30","end":"08:00","label":"Run"},
+            {"start":"9am","end":"10:00","label":"Read"},
+            {"start":"12:00","end":"11:00","label":"Lunch"}]}""")
+        val r = service(AiSettings(mode = AiMode.OWN_KEY, consentGiven = true), client).draftRoutine(PresetKind.DAILY, "x")
+        assertEquals(listOf("Gym"), r.blocks.map { it.label })
+        assertEquals(3, r.problems.size)
+    }
+
+    @Test fun `no routine request is made without consent`() = runTest {
+        secrets.put(AiService.KEY_API, "sk-ant-x")
+        val client = Scripted()
+        val s = service(AiSettings(mode = AiMode.OWN_KEY, consentGiven = false), client)
+        assertTrue(runCatching { s.draftRoutine(PresetKind.DAILY, "x") }.isFailure)
+        assertTrue(client.calls.isEmpty())
     }
 
     @Test fun `unreadable output is reported, not saved`() = runTest {

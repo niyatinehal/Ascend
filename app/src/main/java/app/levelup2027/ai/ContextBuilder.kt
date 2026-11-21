@@ -82,6 +82,10 @@ object ContextBuilder {
         val personContext: String,
     )
 
+    @Serializable data class RoutineInput(val preset: String, val userMessage: String)
+
+    fun routine(preset: String, text: String) = AiJson.encodeToString(RoutineInput.serializer(), RoutineInput(preset, text.trim()))
+
     fun intake(today: LocalDate, text: String) = AiJson.encodeToString(IntakeInput.serializer(), IntakeInput(today.toString(), text.trim()))
 
     fun plan(

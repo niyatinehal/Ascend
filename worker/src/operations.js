@@ -7,6 +7,7 @@ export const OPERATIONS = {
   plan: { model: "claude-sonnet-5-5", effort: "medium", maxTokens: 16000, fallback: true },
   week: { model: "claude-sonnet-5-5", effort: "low", maxTokens: 8000, fallback: true },
   adjust: { model: "claude-sonnet-5-5", effort: "low", maxTokens: 6000, fallback: true },
+  routine: { model: "claude-haiku-5-5", effort: "low", maxTokens: 3000, fallback: false },
 };
 
 export const LIMITS = {

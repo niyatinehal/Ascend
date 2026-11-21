@@ -125,7 +125,7 @@ test("only the app's own system prompts are accepted when enforcement is on", as
   const r = await validateAiRequest(plan, { ENFORCE_PROMPT_HASHES: "true" });
   assert.equal(r.error.status, 400);
   // The allowlist has one hash per operation, all SHA-256.
-  assert.deepEqual(Object.keys(HASHES).sort(), ["adjust", "intake", "plan", "week"]);
+  assert.deepEqual(Object.keys(HASHES).sort(), ["adjust", "intake", "plan", "routine", "week"]);
   Object.values(HASHES).forEach((h) => assert.match(h, /^[0-9a-f]{64}$/));
   const fake = createHash("sha256").update("not the real prompt").digest("hex");
   assert.ok(!Object.values(HASHES).includes(fake));

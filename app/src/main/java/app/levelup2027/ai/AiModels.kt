@@ -205,6 +205,12 @@ data class ChatTurn(val role: String, val text: String)
  * additionalProperties=false, as the API requires; optional values are expressed as nullable or empty.
  * No numeric/string length constraints (unsupported): the validator enforces ranges.
  */
+@Serializable
+data class DraftBlock(val start: String = "", val end: String = "", val label: String = "")
+
+@Serializable
+data class RoutineDraft(val blocks: List<DraftBlock> = emptyList())
+
 object Schemas {
     private val nullableInt = buildJsonObject { putJsonArray("anyOf") { add(obj("type" to "integer")); add(obj("type" to "null")) } }
     private val nullableNumber = buildJsonObject { putJsonArray("anyOf") { add(obj("type" to "number")); add(obj("type" to "null")) } }
@@ -294,6 +300,10 @@ object Schemas {
         prop("weekly_outcomes", arrayOf(outcome))
         prop("tasks", arrayOf(task))
         stringList("notes")
+    }
+
+    val routine: JsonObject = objectSchema {
+        prop("blocks", arrayOf(objectSchema { string("start"); string("end"); string("label") }))
     }
 
     val adjust: JsonObject = objectSchema {

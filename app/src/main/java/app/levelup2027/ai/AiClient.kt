@@ -44,6 +44,7 @@ enum class AiOperation(val wireName: String, val model: String, val effort: Stri
     PLAN("plan", "claude-sonnet-5-5", "medium", 16_000, serverFallback = true),
     WEEK("week", "claude-sonnet-5-5", "low", 8_000, serverFallback = true),
     ADJUST("adjust", "claude-sonnet-5-5", "low", 6_000, serverFallback = true),
+    ROUTINE("routine", "claude-haiku-5-5", "low", 3_000, serverFallback = false),
 }
 
 data class AiRequest(

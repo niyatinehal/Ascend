@@ -74,7 +74,7 @@ class GeminiClient(
         val PLAN_MODEL = PLAN_MODELS.first()
         val LIGHT_MODEL = LIGHT_MODELS.first()
 
-        fun modelsFor(op: AiOperation) = if (op == AiOperation.INTAKE) LIGHT_MODELS else PLAN_MODELS
+        fun modelsFor(op: AiOperation) = if (op == AiOperation.INTAKE || op == AiOperation.ROUTINE) LIGHT_MODELS else PLAN_MODELS
 
         /** Thinking tokens count towards Gemini's output limit, so allow more room than for Claude. */
         fun maxOutputTokens(op: AiOperation) = (op.maxTokens * 2).coerceAtMost(65_536)

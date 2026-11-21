@@ -86,4 +86,13 @@ Rules:
 - reply: one to three short sentences summarising what you suggest and why, e.g. "Your schedule changed. I suggest moving two flexible tasks to Saturday and doing tonight's learning session as its minimum version. Your deadline stays the same."
 - If the request is ambiguous, set needs_clarification=true, ask one short question, and propose no changes. If nothing needs to change, say so and propose no changes.
 """
+
+    val ROUTINE = SHARED + """
+Task: turn the person's description of one kind of day into time blocks for their routine. The input names the preset (for example "Daily Routine" or "Lazy Day") and their own words.
+
+- Each block has a start and an end in 24-hour "HH:mm" and a short label (at most 40 characters), such as "Gym" or "Office".
+- Use only what they described. Don't invent activities, and leave gaps where they gave no plan.
+- Blocks must not overlap and must stay within one day. Use "24:00" for a block that ends at midnight; leave out anything after midnight, including sleep.
+- List blocks in time order. If the description is too vague to place anything, return an empty list.
+"""
 }

@@ -24,6 +24,7 @@ class PromptHashesTest {
         AiOperation.PLAN.wireName to Prompts.PLAN,
         AiOperation.WEEK.wireName to Prompts.WEEK,
         AiOperation.ADJUST.wireName to Prompts.ADJUST,
+        AiOperation.ROUTINE.wireName to Prompts.ROUTINE,
     )
 
     @Test fun `server prompt allowlist matches the app's prompts`() {
