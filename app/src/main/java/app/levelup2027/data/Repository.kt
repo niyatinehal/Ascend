@@ -2,6 +2,10 @@ package app.levelup2027.data
 
 import app.levelup2027.ai.PlanChange
 import app.levelup2027.ai.PlanMaterialization
+import app.levelup2027.domain.Block
+import app.levelup2027.domain.PresetKind
+import app.levelup2027.domain.Routine
+import app.levelup2027.domain.RoutineSetup
 import app.levelup2027.domain.Dates
 import app.levelup2027.domain.ScheduleEngine
 import app.levelup2027.domain.WidgetMode
@@ -179,7 +183,14 @@ class Repository(
      * Widget checkbox: completes an open task with the version the widget shows, or clears an
      * existing record (so an accidental tap is reversible from the widget too).
      */
-    suspend fun toggleFromWidget(taskId: String, date: LocalDate): CompletionType? {
+    suspend fun toggleFromWidget(taskId: String, date: LocalDate): CompletionType? =
+        toggle(taskId, date, minimumByDefault = settings.current().widget.mode == WidgetMode.MINIMUM)
+
+    /**
+     * One-tap complete/undo, shared by the widget and the block check-in. Completes as MINIMUM on a
+     * low-energy day, when [minimumByDefault], or when the occurrence prefers minimum; otherwise IDEAL.
+     */
+    suspend fun toggle(taskId: String, date: LocalDate, minimumByDefault: Boolean): CompletionType? {
         val existing = completionDao.get(taskId, date)
         if (existing != null && existing.completionType != CompletionType.RESCHEDULED) {
             undo(taskId, date)
@@ -188,7 +199,7 @@ class Repository(
         val task = taskDao.get(taskId) ?: return null
         val s = settings.current()
         val preferMin = planDao.overridesFor(date).any { it.taskId == taskId && it.preferMinimum }
-        val type = if (s.isLowEnergy(date) || s.widget.mode == WidgetMode.MINIMUM || preferMin) CompletionType.MINIMUM else CompletionType.IDEAL
+        val type = if (s.isLowEnergy(date) || minimumByDefault || preferMin) CompletionType.MINIMUM else CompletionType.IDEAL
         complete(task, date, type)
         return type
     }
@@ -354,6 +365,31 @@ class Repository(
 
     suspend fun setLowEnergy(today: LocalDate, on: Boolean) =
         updateSettings { it.copy(lowEnergyDate = if (on) today else null) }
+
+    // ---- Routine ----
+
+    /** Returns validation problems and stores nothing, or stores the normalized blocks and returns an empty list. */
+    suspend fun savePreset(kind: PresetKind, blocks: List<Block>): List<String> {
+        val problems = Routine.validate(blocks)
+        if (problems.isNotEmpty()) return problems
+        updateSettings { it.copy(routine = it.routine.copy(presets = it.routine.presets + (kind to Routine.normalized(blocks)))) }
+        return emptyList()
+    }
+
+    /** Today's preset. Lazy Day turns low-energy on for today; leaving today's Lazy Day turns it off. */
+    suspend fun setPreset(today: LocalDate, kind: PresetKind) = updateSettings { s ->
+        val wasLazy = Routine.activeKind(s.routine, today) == PresetKind.LAZY
+        val lowEnergyDate = when {
+            kind == PresetKind.LAZY -> today
+            wasLazy -> null
+            else -> s.lowEnergyDate
+        }
+        s.copy(routine = s.routine.copy(activeKind = kind, activeDate = today), lowEnergyDate = lowEnergyDate)
+    }
+
+    suspend fun setRoutineSetup(state: RoutineSetup) = updateSettings { it.copy(routine = it.routine.copy(setup = state)) }
+
+    suspend fun dismissRoutinePrompt() = updateSettings { it.copy(routine = it.routine.copy(promptDismissed = true)) }
 
     // ---- Widget ----
 
