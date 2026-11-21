@@ -45,7 +45,11 @@ class AssistantActivity : ComponentActivity() {
                     vm, adjust,
                     onDismiss = { finish() },
                     onOpenAiSettings = {
-                        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN_TAB, "settings"))
+                        startActivity(
+                            Intent(this, MainActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                .putExtra(MainActivity.EXTRA_OPEN_TAB, "settings"),
+                        )
                         finish()
                     },
                     title = "Ascend assistant",
