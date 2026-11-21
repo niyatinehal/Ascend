@@ -95,6 +95,9 @@ enum class DefaultMode(val label: String) {
 
 enum class ThemeChoice(val label: String) { DARK("Dark"), LIGHT("Light"), SYSTEM("Follow system") }
 
+/** Colour presets; [ThemeChoice] picks the dark or light version. Gold is the original look. */
+enum class ThemePreset(val label: String) { GOLD("Gold"), OCEAN("Ocean"), FOREST("Forest"), ROSE("Rose"), LAVENDER("Lavender"), EMBER("Ember") }
+
 /** Fixed goal ids; tasks link to these. */
 object GoalIds {
     const val CAREER = "career"

@@ -32,8 +32,6 @@ import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -42,13 +40,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import app.levelup2027.data.CategoryEntity
 import app.levelup2027.data.ThemeChoice
+import app.levelup2027.data.ThemePreset
 import app.levelup2027.data.TimeSlot
 
 object Palette {
     val Gold = Color(0xFFE8B44C)       // ideal / accent
-    val GoldDeep = Color(0xFF9A6B00)
+    val GoldDeep = Color(0xFF946600)   // 4.6:1 on the light background
     val Teal = Color(0xFF5DBBA6)       // minimum
-    val TealDeep = Color(0xFF2F7F6F)
+    val TealDeep = Color(0xFF2D7A6A)   // 4.7:1 on the light background
     val Bg = Color(0xFF0F1115)
     val Surface = Color(0xFF171A21)
     val SurfaceHigh = Color(0xFF1F232C)
@@ -105,53 +104,6 @@ val TimeSlot.icon: ImageVector
         TimeSlot.FLEXIBLE -> Icons.Outlined.Schedule
     }
 
-private val DarkColors = darkColorScheme(
-    primary = Palette.Gold,
-    onPrimary = Color(0xFF1C1405),
-    primaryContainer = Color(0xFF3A2C10),
-    onPrimaryContainer = Color(0xFFF7DDA6),
-    secondary = Palette.Teal,
-    onSecondary = Color(0xFF00201A),
-    secondaryContainer = Color(0xFF16352F),
-    onSecondaryContainer = Color(0xFFB8EDE0),
-    background = Palette.Bg,
-    onBackground = Palette.Text,
-    surface = Palette.Bg,
-    onSurface = Palette.Text,
-    surfaceVariant = Palette.SurfaceHigh,
-    onSurfaceVariant = Palette.TextMuted,
-    surfaceContainerLowest = Color(0xFF0B0D10),
-    surfaceContainerLow = Palette.Surface,
-    surfaceContainer = Palette.Surface,
-    surfaceContainerHigh = Palette.SurfaceHigh,
-    surfaceContainerHighest = Color(0xFF262B35),
-    outline = Color(0xFF454C5A),
-    outlineVariant = Palette.Outline,
-    error = Color(0xFFF2A0A0),
-)
-
-private val LightColors = lightColorScheme(
-    primary = Palette.GoldDeep,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFBE7BC),
-    onPrimaryContainer = Color(0xFF2B1F00),
-    secondary = Palette.TealDeep,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCDEEE6),
-    onSecondaryContainer = Color(0xFF00201A),
-    background = Color(0xFFF6F5F2),
-    onBackground = Color(0xFF1B1C1F),
-    surface = Color(0xFFF6F5F2),
-    onSurface = Color(0xFF1B1C1F),
-    surfaceVariant = Color(0xFFE9E7E2),
-    onSurfaceVariant = Color(0xFF55585F),
-    surfaceContainerLow = Color.White,
-    surfaceContainer = Color.White,
-    surfaceContainerHigh = Color(0xFFF0EEEA),
-    surfaceContainerHighest = Color(0xFFE6E3DD),
-    outlineVariant = Color(0xFFDAD7D0),
-)
-
 private val AppTypography = Typography().run {
     copy(
         titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -164,13 +116,13 @@ private val AppTypography = Typography().run {
 val OverlineStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
 
 @Composable
-fun LevelUpTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
+fun LevelUpTheme(choice: ThemeChoice, preset: ThemePreset = ThemePreset.GOLD, content: @Composable () -> Unit) {
     val dark = when (choice) {
         ThemeChoice.DARK -> true
         ThemeChoice.LIGHT -> false
         ThemeChoice.SYSTEM -> isSystemInDarkTheme()
     }
-    MaterialTheme(colorScheme = if (dark) DarkColors else LightColors, typography = AppTypography, content = content)
+    MaterialTheme(colorScheme = ThemePresets.scheme(preset, dark), typography = AppTypography, content = content)
 }
 
 /** Ideal = accent gold, minimum = teal; used consistently across cards, badges and charts. */

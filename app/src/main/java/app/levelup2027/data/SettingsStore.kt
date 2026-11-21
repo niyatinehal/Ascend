@@ -93,6 +93,7 @@ data class AiSettings(
 @Serializable
 data class AppSettings(
     val theme: ThemeChoice = ThemeChoice.DARK,
+    val themePreset: ThemePreset = ThemePreset.GOLD,
     val defaultMode: DefaultMode = DefaultMode.DECIDE,
     /** v1 kept enabled categories here (as enum names); now they live on the category rows. */
     @SerialName("enabledCategories") val legacyEnabledCategories: Set<String>? = null,
