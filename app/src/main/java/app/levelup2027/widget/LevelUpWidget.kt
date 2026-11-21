@@ -50,6 +50,7 @@ import app.levelup2027.MainActivity
 import app.levelup2027.R
 import app.levelup2027.container
 import app.levelup2027.data.TimeSlot
+import app.levelup2027.ui.assistant.AssistantActivity
 import app.levelup2027.domain.DateFmt
 import app.levelup2027.domain.WidgetItem
 import app.levelup2027.domain.WidgetState
@@ -167,8 +168,14 @@ private fun Header(state: WidgetState, compact: Boolean) {
             "${state.done}/${state.scheduled}",
             style = TextStyle(color = text, fontSize = if (compact) 14.sp else 16.sp, fontWeight = FontWeight.Bold),
         )
+        Spacer(GlanceModifier.width(if (compact) 4.dp else 6.dp))
+        Image(
+            provider = ImageProvider(R.drawable.ic_mic),
+            contentDescription = "Ask Ascend",
+            colorFilter = ColorFilter.tint(muted),
+            modifier = GlanceModifier.size(28.dp).padding(4.dp).clickable(actionStartActivity<AssistantActivity>()),
+        )
         if (!compact) {
-            Spacer(GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_refresh),
                 contentDescription = "Refresh",

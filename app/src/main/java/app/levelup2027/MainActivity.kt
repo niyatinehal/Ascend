@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
         val tab = when (intent.getStringExtra(EXTRA_OPEN_TAB)) {
             "review" -> Tab.REVIEW
             "today" -> Tab.TODAY
+            "settings" -> Tab.SETTINGS
             else -> null
         }
         val slot = intent.getStringExtra(EXTRA_OPEN_SLOT)?.let { runCatching { TimeSlot.valueOf(it) }.getOrNull() }

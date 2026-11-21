@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.levelup2027.ui.assistant.AssistantActivity
 import app.levelup2027.LevelUpApp
 import app.levelup2027.MainActivity
 import app.levelup2027.domain.Block
@@ -134,5 +135,11 @@ class RoutineScreenshots {
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Done")).fetchSemanticsNodes().isNotEmpty() }
         shot("15-checkin-ticked")
         checkIn.close()
+
+        // ---- Widget assistant ----
+        val assistant = ActivityScenario.launch(AssistantActivity::class.java)
+        waitFor("Ascend assistant")
+        shot("16-assistant-open")
+        assistant.close()
     }
 }
