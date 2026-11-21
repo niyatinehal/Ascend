@@ -140,4 +140,11 @@ class ProgressAndWidgetTest {
         val sunEvening = ZonedDateTime.of(2026, 11, 8, 19, 0, 0, 0, zone)
         assertEquals(LocalDate.of(2026, 11, 15), ReminderScheduler.nextTrigger(sunEvening, 18, 0, DayOfWeek.SUNDAY).toLocalDate())
     }
+
+    @Test fun `widget state carries the chosen preset`() = kotlinx.coroutines.test.runTest {
+        val env = TestEnv(app.levelup2027.data.AppSettings(themePreset = app.levelup2027.data.ThemePreset.FOREST))
+        assertEquals(app.levelup2027.data.ThemePreset.FOREST, env.repo.widgetStateNow(mon).preset)
+        val plain = WidgetStateBuilder.build(mon, emptyList(), emptyList(), emptySet(), WidgetConfig(), lowEnergy = false)
+        assertEquals(app.levelup2027.data.ThemePreset.GOLD, plain.preset)
+    }
 }

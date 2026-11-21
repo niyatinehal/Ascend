@@ -441,6 +441,7 @@ class Repository(
             today, t, c, hiddenCategories(cats), s.widget.toConfig(), s.isLowEnergy(today),
             preferMinimum = ov.filter { it.date == today && it.preferMinimum }.mapTo(HashSet()) { it.taskId },
             categoryColors = cats.associate { it.id to it.colorIndex },
+            preset = s.themePreset,
         )
 
     /** Open tasks in a slot today, used for reminder text. */

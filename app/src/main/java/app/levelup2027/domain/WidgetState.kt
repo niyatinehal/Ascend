@@ -3,6 +3,7 @@ package app.levelup2027.domain
 import app.levelup2027.data.Completion
 import app.levelup2027.data.CompletionType
 import app.levelup2027.data.Task
+import app.levelup2027.data.ThemePreset
 import app.levelup2027.data.TimeSlot
 import java.time.LocalDate
 
@@ -40,6 +41,7 @@ data class WidgetState(
     val items: List<WidgetItem>,
     val config: WidgetConfig,
     val lowEnergy: Boolean,
+    val preset: ThemePreset = ThemePreset.GOLD,
 )
 
 object WidgetStateBuilder {
@@ -52,6 +54,7 @@ object WidgetStateBuilder {
         lowEnergy: Boolean,
         preferMinimum: Set<String> = emptySet(),
         categoryColors: Map<String, Int> = emptyMap(),
+        preset: ThemePreset = ThemePreset.GOLD,
     ): WidgetState {
         val occ = ScheduleEngine.occurrencesFor(date, tasks, completions, hiddenCategories)
             .filter { config.slot == null || it.task.timeSlot == config.slot }
@@ -75,7 +78,7 @@ object WidgetStateBuilder {
         }
         val open = occ.filter { it.isOpen }.map(::item)
         val closed = if (config.showCompleted) occ.filter { it.isDone }.map(::item) else emptyList()
-        return WidgetState(date, progress.done, progress.scheduled, open.size, open + closed, config, lowEnergy)
+        return WidgetState(date, progress.done, progress.scheduled, open.size, open + closed, config, lowEnergy, preset)
     }
 
     private fun firstLine(s: String) = s.lineSequence().map { it.trim().removePrefix("•").removePrefix("-").trim() }

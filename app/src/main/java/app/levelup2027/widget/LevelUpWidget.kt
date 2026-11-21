@@ -54,7 +54,11 @@ import app.levelup2027.ui.assistant.AssistantActivity
 import app.levelup2027.domain.DateFmt
 import app.levelup2027.domain.WidgetItem
 import app.levelup2027.domain.WidgetState
-import app.levelup2027.ui.theme.Palette
+import app.levelup2027.data.ThemePreset
+import app.levelup2027.ui.theme.ThemePresets
+import app.levelup2027.ui.theme.WidgetColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import app.levelup2027.ui.theme.categoryColor
 import java.time.LocalDate
 
@@ -105,13 +109,30 @@ class RefreshAction : ActionCallback {
     }
 }
 
-private val text = ColorProvider(Palette.Text)
-private val muted = ColorProvider(Palette.TextMuted)
-private val gold = ColorProvider(Palette.Gold)
-private val teal = ColorProvider(Palette.Teal)
+/** The chosen preset's dark colours, provided once in [WidgetBody]. */
+private class WidgetPalette(c: WidgetColors) {
+    val bg = ColorProvider(c.bg)
+    val surfaceHigh = ColorProvider(c.surfaceHigh)
+    val text = ColorProvider(c.text)
+    val muted = ColorProvider(c.muted)
+    val ideal = ColorProvider(c.ideal)
+    val minimum = ColorProvider(c.minimum)
+}
+
+private val LocalWidgetPalette = staticCompositionLocalOf { WidgetPalette(ThemePresets.widget(ThemePreset.GOLD)) }
+
+private val text: ColorProvider @Composable get() = LocalWidgetPalette.current.text
+private val muted: ColorProvider @Composable get() = LocalWidgetPalette.current.muted
+private val ideal: ColorProvider @Composable get() = LocalWidgetPalette.current.ideal
+private val minimum: ColorProvider @Composable get() = LocalWidgetPalette.current.minimum
 
 @Composable
 private fun WidgetBody(state: WidgetState) {
+    CompositionLocalProvider(LocalWidgetPalette provides WidgetPalette(ThemePresets.widget(state.preset))) { WidgetContent(state) }
+}
+
+@Composable
+private fun WidgetContent(state: WidgetState) {
     val size = LocalSize.current
     val layout = when {
         size.height >= LARGE.height -> 2
@@ -120,7 +141,7 @@ private fun WidgetBody(state: WidgetState) {
     }
     Column(
         modifier = GlanceModifier.fillMaxSize().appWidgetBackground()
-            .background(Palette.Bg).cornerRadius(20.dp).padding(horizontal = 12.dp, vertical = 10.dp),
+            .background(LocalWidgetPalette.current.bg).cornerRadius(20.dp).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Header(state, compact = layout == 0)
         Spacer(GlanceModifier.height(6.dp))
@@ -156,7 +177,7 @@ private fun Header(state: WidgetState, compact: Boolean) {
         verticalAlignment = Alignment.Vertical.CenterVertically,
     ) {
         Column(modifier = GlanceModifier.defaultWeight()) {
-            Text("ASCEND", style = TextStyle(color = gold, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Text("ASCEND", style = TextStyle(color = ideal, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
             val sub = buildString {
                 append(DateFmt.widget(state.date))
                 state.config.slot?.let { append(" · ").append(it.shortLabel) }
@@ -188,8 +209,8 @@ private fun Header(state: WidgetState, compact: Boolean) {
     LinearProgressIndicator(
         progress = if (state.scheduled == 0) 0f else state.done.toFloat() / state.scheduled,
         modifier = GlanceModifier.fillMaxWidth().height(4.dp),
-        color = gold,
-        backgroundColor = ColorProvider(Palette.SurfaceHigh),
+        color = ideal,
+        backgroundColor = LocalWidgetPalette.current.surfaceHigh,
     )
     if (!compact) {
         Spacer(GlanceModifier.height(3.dp))
@@ -228,8 +249,8 @@ private fun TaskRow(item: WidgetItem, showLine: Boolean) {
                 colorFilter = ColorFilter.tint(
                     when {
                         !item.done -> muted
-                        item.completionType == app.levelup2027.data.CompletionType.MINIMUM -> teal
-                        else -> gold
+                        item.completionType == app.levelup2027.data.CompletionType.MINIMUM -> minimum
+                        else -> ideal
                     },
                 ),
                 modifier = GlanceModifier.size(24.dp),
