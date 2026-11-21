@@ -62,6 +62,13 @@ private val EXAMPLES = listOf(
     "I have exams next week.",
 )
 
+private val ASSISTANT_EXAMPLES = listOf(
+    "Switch to Lazy Day",
+    "Move my gym block to 6 to 8",
+    "I finished the gym",
+    "What's left today?",
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AdjustSheet(
@@ -70,6 +77,8 @@ fun AdjustSheet(
     intro: String = "Tell me what changed. I'll suggest specific changes, and nothing happens until you approve them.",
     listenOnOpen: Boolean = false,
     onApplied: () -> Unit = {},
+    /** The widget assistant: its own examples and footer, and a Close button after a reply with nothing to apply. */
+    assistantMode: Boolean = false,
 ) {
     val state by adjust.state.collectAsState()
     var showConsent by remember { mutableStateOf(false) }
@@ -130,18 +139,28 @@ fun AdjustSheet(
                                 if (c.major) Pill("Needs your OK", MaterialTheme.colorScheme.primary)
                             }
                         }
-                        if (p.rejected.isNotEmpty()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("${p.rejected.size} suggestion${if (p.rejected.size == 1) " was" else "s were"} left out because they didn't match your plan or would change history.",
-                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = adjust::rejectProposal, modifier = Modifier.weight(1f)) { Text("No thanks") }
                             Button(onClick = adjust::applySelected, enabled = state.selected.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("Apply selected") }
                         }
                     }
-                } else if (state.question.isBlank()) {
-                    Text("No changes needed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                // The reply was written before validation, so always say what couldn't be done.
+                if (p.rejected.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("${p.rejected.size} suggestion${if (p.rejected.size == 1) " was" else "s were"} left out:",
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        p.rejected.forEach { r ->
+                            Text("• ${friendlyRejection(r)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (p.changes.isEmpty() && state.question.isBlank()) {
+                    if (assistantMode) {
+                        Button(onClick = { adjust.reset(); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text("Close") }
+                    } else if (p.rejected.isEmpty()) {
+                        Text("No changes needed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
             if (state.applied.isNotBlank()) {
@@ -150,7 +169,7 @@ fun AdjustSheet(
 
             if (state.turns.isEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    EXAMPLES.forEach { e -> AssistChip(onClick = { adjust.setInput(e) }, label = { Text(e) }) }
+                    (if (assistantMode) ASSISTANT_EXAMPLES else EXAMPLES).forEach { e -> AssistChip(onClick = { adjust.setInput(e) }, label = { Text(e) }) }
                 }
             }
             if (focusField) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -168,7 +187,7 @@ fun AdjustSheet(
                     }
                 },
             )
-            Text("Uses one AI request per message. Ticking tasks never uses AI.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (assistantMode) "Uses one AI request per message." else "Uses one AI request per message. Ticking tasks never uses AI.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if (showConsent) AiConsentDialog(vm, onDismiss = { showConsent = false }) { showConsent = false; adjust.send() }

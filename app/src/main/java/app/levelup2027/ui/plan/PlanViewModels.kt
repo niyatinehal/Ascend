@@ -243,6 +243,13 @@ data class AdjustState(
 fun shouldAutoApply(autoApplySimple: Boolean, alwaysConfirm: Boolean, validated: ValidatedChanges, needsClarification: Boolean): Boolean =
     autoApplySimple && !alwaysConfirm && !needsClarification && validated.allSimple
 
+/** A send the AI couldn't take yet (consent, setup): keep the request so it's sent once unblocked. */
+fun AdjustState.blockedBy(block: AiBlock, text: String): AdjustState = copy(block = block, input = text)
+
+/** Validator rejections read "TYPE: why"; the person only needs the why. */
+fun friendlyRejection(raw: String): String =
+    raw.replaceFirst(Regex("^[A-Z][A-Z_]*: "), "").replaceFirstChar { it.uppercaseChar() }
+
 class AdjustViewModel(private val c: AppContainer, private val alwaysConfirm: Boolean = false) : ViewModel() {
     private val repo = c.repository
     private val _state = MutableStateFlow(AdjustState())
@@ -259,7 +266,7 @@ class AdjustViewModel(private val c: AppContainer, private val alwaysConfirm: Bo
         if (text.isEmpty()) return
         job?.cancel()
         job = viewModelScope.launch {
-            checkReady(c)?.let { _state.value = _state.value.copy(block = it); return@launch }
+            checkReady(c)?.let { _state.value = _state.value.blockedBy(it, text); return@launch }
             val turns = _state.value.turns + ChatTurn("user", text)
             _state.value = _state.value.copy(turns = turns, input = "", working = true, block = null, proposal = null, reply = "", question = "", applied = "")
             val today = Dates.today()
