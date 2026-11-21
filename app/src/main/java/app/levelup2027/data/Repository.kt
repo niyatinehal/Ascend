@@ -334,9 +334,8 @@ class Repository(
      * Applies validated changes. Nothing here deletes history: skipped/moved occurrences get a
      * record, removed habits are disabled, and completed records are never edited.
      */
-    suspend fun applyChanges(changes: List<PlanChange>, source: String, requestText: String) {
+    suspend fun applyChanges(changes: List<PlanChange>, source: String, requestText: String, today: LocalDate = Dates.today()) {
         if (changes.isEmpty()) return
-        val today = Dates.today()
         for (c in changes) {
             when (c) {
                 is PlanChange.Reschedule -> reschedule(c.task, c.from, c.to, c.reason.take(200))
@@ -351,6 +350,20 @@ class Repository(
                 is PlanChange.UpdateGoal -> goalDao.upsertGoal(c.after)
                 is PlanChange.SetCapacity -> settings.update { it.copy(capacity = c.after) }
                 is PlanChange.SetLowEnergy -> settings.update { it.copy(lowEnergyDate = today) }
+                is PlanChange.SetPreset -> settings.update { withPreset(it, today, c.kind) }
+                is PlanChange.SetTodayBlocks -> settings.update {
+                    it.copy(routine = it.routine.copy(todayOverride = DayOverride(today, c.kind, Routine.normalized(c.blocks))))
+                }
+                is PlanChange.SetPresetBlocks -> settings.update {
+                    it.copy(routine = it.routine.copy(presets = it.routine.presets + (c.kind to Routine.normalized(c.blocks))))
+                }
+                is PlanChange.CompleteTask -> {
+                    val type = c.type ?: usualType(c.task, c.date)
+                    completionDao.put(
+                        Completion(taskId = c.task.id, taskTitle = c.task.title, scheduledDate = c.date, completionType = type,
+                            completedAt = clock(), notes = c.reason.take(200)),
+                    )
+                }
             }
         }
         planDao.log(ChangeLogEntry(at = clock(), source = source, summary = requestText.take(200), detail = changes.joinToString("\n") { it.summary }))
@@ -386,14 +399,23 @@ class Repository(
     }
 
     /** Today's preset. Lazy Day turns low-energy on for today; leaving today's Lazy Day turns it off. */
-    suspend fun setPreset(today: LocalDate, kind: PresetKind) = updateSettings { s ->
+    suspend fun setPreset(today: LocalDate, kind: PresetKind) = updateSettings { withPreset(it, today, kind) }
+
+    private fun withPreset(s: AppSettings, today: LocalDate, kind: PresetKind): AppSettings {
         val wasLazy = Routine.activeKind(s.routine, today) == PresetKind.LAZY
         val lowEnergyDate = when {
             kind == PresetKind.LAZY -> today
             wasLazy -> null
             else -> s.lowEnergyDate
         }
-        s.copy(routine = s.routine.copy(activeKind = kind, activeDate = today), lowEnergyDate = lowEnergyDate)
+        return s.copy(routine = s.routine.copy(activeKind = kind, activeDate = today), lowEnergyDate = lowEnergyDate)
+    }
+
+    /** What a plain "done" means for [task]: minimum on a low-energy day, by default setting, or when asked for that day. */
+    private suspend fun usualType(task: Task, date: LocalDate): CompletionType {
+        val s = settings.current()
+        val preferMin = planDao.overridesFor(date).any { it.taskId == task.id && it.preferMinimum }
+        return if (s.isLowEnergy(date) || s.defaultMode == DefaultMode.MINIMUM || preferMin) CompletionType.MINIMUM else CompletionType.IDEAL
     }
 
     suspend fun setRoutineSetup(state: RoutineSetup) = updateSettings { it.copy(routine = it.routine.copy(setup = state)) }

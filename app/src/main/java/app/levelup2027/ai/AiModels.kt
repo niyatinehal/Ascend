@@ -162,7 +162,14 @@ object ChangeTypes {
     const val UPDATE_GOAL = "UPDATE_GOAL"
     const val SET_CAPACITY = "SET_CAPACITY"
     const val SET_LOW_ENERGY = "SET_LOW_ENERGY"
-    val ALL = listOf(RESCHEDULE, USE_MINIMUM, SKIP_OCCURRENCE, UPDATE_TASK, ADD_TASK, DISABLE_TASK, UPDATE_GOAL, SET_CAPACITY, SET_LOW_ENERGY)
+    const val SET_PRESET = "SET_PRESET"
+    const val SET_TODAY_BLOCKS = "SET_TODAY_BLOCKS"
+    const val SET_PRESET_BLOCKS = "SET_PRESET_BLOCKS"
+    const val COMPLETE_TASK = "COMPLETE_TASK"
+    val ALL = listOf(
+        RESCHEDULE, USE_MINIMUM, SKIP_OCCURRENCE, UPDATE_TASK, ADD_TASK, DISABLE_TASK, UPDATE_GOAL, SET_CAPACITY, SET_LOW_ENERGY,
+        SET_PRESET, SET_TODAY_BLOCKS, SET_PRESET_BLOCKS, COMPLETE_TASK,
+    )
 }
 
 /** One proposed change. Unused fields are empty / null; the validator reads only what [type] needs. */
@@ -186,6 +193,9 @@ data class ChangeOp(
     val weekdayMinutes: Int? = null,
     val weekendMinutes: Int? = null,
     val newTask: DraftTask? = null,
+    val preset: String = "",
+    val blocks: List<DraftBlock> = emptyList(),
+    val completion: String = "",
     val reason: String = "",
 )
 

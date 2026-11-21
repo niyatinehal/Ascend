@@ -2,14 +2,19 @@ package app.levelup2027.ai
 
 import app.levelup2027.data.Capacity
 import app.levelup2027.data.Completion
+import app.levelup2027.data.CompletionType
 import app.levelup2027.data.EnergyLevel
 import app.levelup2027.data.Goal
 import app.levelup2027.data.GoalStatus
 import app.levelup2027.data.Source
 import app.levelup2027.data.Task
 import app.levelup2027.data.TimeSlot
+import app.levelup2027.domain.Block
 import app.levelup2027.domain.DateFmt
+import app.levelup2027.domain.PresetKind
 import app.levelup2027.domain.Recurrence
+import app.levelup2027.domain.Routine
+import app.levelup2027.domain.RoutineSettings
 import app.levelup2027.domain.ScheduleEngine
 import java.time.LocalDate
 
@@ -85,6 +90,32 @@ sealed class PlanChange {
         override val major get() = false
         override val summary get() = "Make ${DateFmt.short(date)} a low-energy day (minimum versions)"
     }
+
+    data class SetPreset(val kind: PresetKind, override val reason: String) : PlanChange() {
+        override val major get() = true
+        override val summary get() = "Switch today to ${kind.label}"
+    }
+
+    data class SetTodayBlocks(val kind: PresetKind, val blocks: List<Block>, override val reason: String) : PlanChange() {
+        override val major get() = true
+        override val summary get() = "Today only (${kind.label}): ${describeBlocks(blocks)}"
+    }
+
+    data class SetPresetBlocks(val kind: PresetKind, val blocks: List<Block>, override val reason: String) : PlanChange() {
+        override val major get() = true
+        override val summary get() = "${kind.label}, from now on: ${describeBlocks(blocks)}"
+    }
+
+    data class CompleteTask(val task: Task, val date: LocalDate, val type: CompletionType?, override val reason: String) : PlanChange() {
+        override val major get() = true
+        override val summary get() = "Mark \"${task.title}\" done" + if (type == CompletionType.MINIMUM) " (minimum)" else ""
+    }
+
+    companion object {
+        private fun time(minute: Int) = if (minute == 1440) "24:00" else Routine.format(minute)
+        private fun describeBlocks(blocks: List<Block>) =
+            if (blocks.isEmpty()) "no blocks" else blocks.joinToString(", ") { "${time(it.startMinute)}–${time(it.endMinute)} ${it.label}" }
+    }
 }
 
 /** The current plan, as far as validating changes needs it. */
@@ -94,6 +125,7 @@ data class PlanState(
     val completions: List<Completion>,
     val goals: List<Goal>,
     val capacity: Capacity,
+    val routine: RoutineSettings = RoutineSettings(),
 )
 
 data class ValidatedChanges(val changes: List<PlanChange>, val rejected: List<String>) {
@@ -113,7 +145,15 @@ object ChangeValidator {
         val horizon = state.today.plusDays(HORIZON_DAYS)
         fun inRange(d: LocalDate) = !d.isBefore(state.today) && !d.isAfter(horizon)
 
-        for (op in ops.take(20)) {
+        val batch = ops.take(20)
+        fun presetOf(name: String): PresetKind? {
+            val n = name.trim()
+            return PresetKind.entries.firstOrNull { it.name.equals(n, true) || it.label.equals(n, true) }
+        }
+        val activeKind = Routine.activeKind(state.routine, state.today)
+        val switchedTo = batch.lastOrNull { it.type == ChangeTypes.SET_PRESET }?.let { presetOf(it.preset) }
+
+        for (op in batch) {
             val task = taskById[op.taskId]
             val date = PlanValidator.parseDate(op.date)
             val newDate = PlanValidator.parseDate(op.newDate)
@@ -212,13 +252,48 @@ object ChangeValidator {
                     val d = date ?: state.today
                     if (d != state.today) reject("low-energy mode applies to today only") else out += PlanChange.SetLowEnergy(d, op.reason)
                 }
+                ChangeTypes.SET_PRESET -> {
+                    val kind = presetOf(op.preset)
+                    when {
+                        kind == null -> reject("unknown preset \"${op.preset}\"")
+                        kind == activeKind -> reject("${kind.label} is already today's preset")
+                        else -> out += PlanChange.SetPreset(kind, op.reason)
+                    }
+                }
+                ChangeTypes.SET_TODAY_BLOCKS, ChangeTypes.SET_PRESET_BLOCKS -> {
+                    val today = op.type == ChangeTypes.SET_TODAY_BLOCKS
+                    val kind = if (op.preset.isNotBlank()) presetOf(op.preset) else if (today) switchedTo ?: activeKind else null
+                    if (kind == null) { reject(if (op.preset.isBlank()) "which preset should change?" else "unknown preset \"${op.preset}\""); continue }
+                    val parsed = RoutineResult.from(RoutineDraft(op.blocks))
+                    if (parsed.problems.isNotEmpty()) { reject(parsed.problems.first()); continue }
+                    out += if (today) PlanChange.SetTodayBlocks(kind, parsed.blocks, op.reason) else PlanChange.SetPresetBlocks(kind, parsed.blocks, op.reason)
+                }
+                ChangeTypes.COMPLETE_TASK -> {
+                    val existing = task?.let { recorded[it.id to state.today] }
+                    when {
+                        task == null -> reject("unknown task")
+                        !ScheduleEngine.isScheduledOn(task, state.today) -> reject("\"${task.title}\" isn't scheduled today")
+                        existing != null && existing.completionType != CompletionType.SKIPPED -> reject("\"${task.title}\" is already done")
+                        else -> out += PlanChange.CompleteTask(task, state.today, when (op.completion.trim().uppercase()) {
+                            "MINIMUM" -> CompletionType.MINIMUM
+                            "IDEAL" -> CompletionType.IDEAL
+                            else -> null
+                        }, op.reason)
+                    }
+                }
                 else -> reject("unknown change type")
             }
         }
         // One change per occurrence: keep the first.
         val seen = HashSet<Pair<String, LocalDate?>>()
+        // Block changes: the last one per kind wins.
+        val lastToday = out.lastOrNull { it is PlanChange.SetTodayBlocks }
+        val lastPreset = out.filterIsInstance<PlanChange.SetPresetBlocks>().associateBy { it.kind }
         val deduped = out.filter { c ->
             val k = when (c) {
+                is PlanChange.SetTodayBlocks -> return@filter c === lastToday
+                is PlanChange.SetPresetBlocks -> return@filter lastPreset[c.kind] === c
+                is PlanChange.CompleteTask -> "complete:${c.task.id}" to null
                 is PlanChange.Reschedule -> c.task.id to c.from
                 is PlanChange.UseMinimum -> c.task.id to c.date
                 is PlanChange.SkipOccurrence -> c.task.id to c.date
