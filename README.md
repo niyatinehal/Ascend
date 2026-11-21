@@ -86,8 +86,9 @@ No API key is stored in the app's source or the APK.
    - *Edit* changes or removes individual goals and tasks, or the daily time budget, with no AI call.
    - *Regenerate* takes optional feedback ("lighter weekdays").
    - Nothing is added to your schedule until you press **Accept**.
-5. **Today** shows your plan. Add the widget (step 5). Complete tasks as ideal or minimum.
-6. **When life changes**, use **Adjust my plan** (step 4).
+5. **Your day.** Lay out your **Daily Routine** as time blocks (e.g. *5:00–7:00 Gym*, *9:00–18:00 Office*), by hand or by describing your day for the AI to turn into blocks. Daily Routine needs at least one block; **Extreme Productive** and **Lazy Day** can be set up now or later (one tap copies Daily Routine as a starting point).
+6. **Today** shows your plan. Add the widget (step 5). Complete tasks as ideal or minimum.
+7. **When life changes**, use **Adjust my plan** (step 4).
 
 If a request fails (no network, quota, a bad response), you see why. What you typed is kept, because drafts are saved on the phone, and **Try again** picks up where you left off. Closing the screen keeps an unfinished draft; **Start over** discards it.
 
@@ -98,6 +99,14 @@ If a request fails (no network, quota, a bad response), you see why. What you ty
 - **Your standing instructions** (Settings → AI): text added to every AI request, e.g. "No tasks before 7am. Weekends are for family. Use metric units." The AI follows it unless it conflicts with the safety rules. It goes in the request, not the system prompt, so the AI server's prompt allowlist still applies.
 
 ## 4. Daily use
+
+### Routines and block check-ins (2.4)
+- **Three presets**: Daily Routine (every day starts on it), Extreme Productive and Lazy Day. Switch any time from the top of Today; the switch lasts until midnight. Today also shows the block you're in (*Now: Gym · until 7:00*).
+- **Lazy Day** also turns on the low-energy view, so tasks show and complete as their minimum versions. Switching away turns it off.
+- **When a block ends**, a check-in shows the block (*5:00–7:00 · Gym*) and today's tasks, the ones that match the block first. Tick what you did; it's the same as ticking on Today. It fills the screen when the phone is locked and shows as a banner while you're using it.
+- **Edit presets** in Settings → Routine, where check-ins can also be turned off. On Android 14+, allow *full-screen notifications* there (or at the end of setup) so check-ins can fill the screen.
+- Upgrading from 2.3 or restoring a 2.3 backup: a card on Today offers to set up your routine; nothing is forced.
+- The AI "describe your day" option uses a new `routine` operation. **If you run the Ascend AI server, redeploy `worker/` before releasing 2.4**, or server-mode requests for it are rejected by the prompt allowlist.
 
 - **Today** answers three questions at the top:
   - **What matters most today?** Highest priority, nearest deadline, and what other tasks depend on.
