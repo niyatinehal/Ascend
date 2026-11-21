@@ -226,4 +226,15 @@ class ChangeValidatorTest {
         assertTrue(r.changes.all { it.major })
         assertFalse(r.allSimple)
     }
+
+    @Test fun `today blocks for a preset that is not today's are rejected`() {
+        val r = rv(ChangeOp(ChangeTypes.SET_TODAY_BLOCKS, preset = "lazy", blocks = okBlocks))
+        assertTrue(r.changes.isEmpty())
+        assertTrue(r.rejected.single(), r.rejected.single().contains("switch to Lazy Day first"))
+        // allowed when the same request switches to it, or when it is today's preset
+        assertEquals(2, rv(ChangeOp(ChangeTypes.SET_PRESET, preset = "lazy"), ChangeOp(ChangeTypes.SET_TODAY_BLOCKS, preset = "lazy", blocks = okBlocks)).changes.size)
+        assertEquals(1, rv(ChangeOp(ChangeTypes.SET_TODAY_BLOCKS, preset = "daily", blocks = okBlocks)).changes.size)
+        // a switch in the batch makes the old active kind invalid
+        assertEquals(1, rv(ChangeOp(ChangeTypes.SET_PRESET, preset = "lazy"), ChangeOp(ChangeTypes.SET_TODAY_BLOCKS, preset = "daily", blocks = okBlocks)).changes.size)
+    }
 }

@@ -358,11 +358,11 @@ class Repository(
                     it.copy(routine = it.routine.copy(presets = it.routine.presets + (c.kind to Routine.normalized(c.blocks))))
                 }
                 is PlanChange.CompleteTask -> {
-                    val type = c.type ?: usualType(c.task, c.date)
-                    completionDao.put(
-                        Completion(taskId = c.task.id, taskTitle = c.task.title, scheduledDate = c.date, completionType = type,
-                            completedAt = clock(), notes = c.reason.take(200)),
-                    )
+                    // The plan may be stale: never undo a completion made since it was validated.
+                    val existing = completionDao.get(c.task.id, c.date)
+                    if (existing == null || existing.completionType == CompletionType.SKIPPED) {
+                        complete(c.task, c.date, c.type ?: usualType(c.task, c.date), notes = c.reason.take(200))
+                    }
                 }
             }
         }

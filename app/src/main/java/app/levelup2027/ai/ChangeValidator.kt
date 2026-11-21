@@ -264,6 +264,11 @@ object ChangeValidator {
                     val today = op.type == ChangeTypes.SET_TODAY_BLOCKS
                     val kind = if (op.preset.isNotBlank()) presetOf(op.preset) else if (today) switchedTo ?: activeKind else null
                     if (kind == null) { reject(if (op.preset.isBlank()) "which preset should change?" else "unknown preset \"${op.preset}\""); continue }
+                    val todaysKind = switchedTo ?: activeKind
+                    if (today && kind != todaysKind) {
+                        reject("today-only blocks apply to today's preset (${todaysKind.label}); switch to ${kind.label} first or say it should be permanent")
+                        continue
+                    }
                     val parsed = RoutineResult.from(RoutineDraft(op.blocks))
                     if (parsed.problems.isNotEmpty()) { reject(parsed.problems.first()); continue }
                     out += if (today) PlanChange.SetTodayBlocks(kind, parsed.blocks, op.reason) else PlanChange.SetPresetBlocks(kind, parsed.blocks, op.reason)

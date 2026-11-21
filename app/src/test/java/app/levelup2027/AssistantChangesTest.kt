@@ -91,4 +91,18 @@ class AssistantChangesTest {
         assertEquals("Switch today to Extreme Productive", entry.detail)
         assertTrue(Repository.ChangeKind.SETTINGS in e.changes)
     }
+
+    @Test fun `completing never replaces a completion made after validation`() = runTest {
+        val e = env()
+        e.repo.complete(t, today, CompletionType.IDEAL)
+        e.repo.applyChanges(listOf(PlanChange.CompleteTask(t, today, CompletionType.MINIMUM, "")), "assistant", "x")
+        assertEquals(CompletionType.IDEAL, e.completions.rows.single().completionType)
+    }
+
+    @Test fun `completing keeps the usual side effects`() = runTest {
+        val e = env()
+        e.repo.applyChanges(listOf(PlanChange.CompleteTask(t, today, null, "")), "assistant", "x")
+        assertTrue(e.settings.current().notificationPromptEligible)
+        assertTrue(Repository.ChangeKind.COMPLETION in e.changes)
+    }
 }
