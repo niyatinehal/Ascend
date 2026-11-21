@@ -45,6 +45,28 @@ class AssistantChangesTest {
         assertEquals(one, Routine.blocksFor(r, today))
     }
 
+    @Test fun `today-only blocks for another preset switch today to that preset`() = runTest {
+        val e = env()
+        val lazy = listOf(block("10:00", "11:00", "Nap"))
+        // The user kept "Today only (Lazy Day)" but unticked "Switch today to Lazy Day".
+        e.repo.applyChanges(listOf(PlanChange.SetTodayBlocks(PresetKind.LAZY, lazy, "")), "assistant", "x")
+        val s = e.settings.current()
+        assertEquals(PresetKind.LAZY, Routine.activeKind(s.routine, today))
+        assertEquals(lazy, Routine.blocksFor(s.routine, today))
+        assertTrue(s.isLowEnergy(today))
+    }
+
+    @Test fun `today-only blocks after a switch in the same apply keep that switch`() = runTest {
+        val e = env()
+        val lazy = listOf(block("10:00", "11:00", "Nap"))
+        e.repo.applyChanges(
+            listOf(PlanChange.SetPreset(PresetKind.LAZY, ""), PlanChange.SetTodayBlocks(PresetKind.LAZY, lazy, "")), "assistant", "x",
+        )
+        val s = e.settings.current()
+        assertEquals(PresetKind.LAZY, Routine.activeKind(s.routine, today))
+        assertEquals(lazy, Routine.blocksFor(s.routine, today))
+    }
+
     @Test fun `permanent blocks change the saved preset`() = runTest {
         val e = env()
         val one = listOf(block("09:00", "10:00", " Read "), block("08:00", "09:00", "Walk"))

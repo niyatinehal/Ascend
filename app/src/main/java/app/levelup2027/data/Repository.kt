@@ -351,8 +351,10 @@ class Repository(
                 is PlanChange.SetCapacity -> settings.update { it.copy(capacity = c.after) }
                 is PlanChange.SetLowEnergy -> settings.update { it.copy(lowEnergyDate = today) }
                 is PlanChange.SetPreset -> settings.update { withPreset(it, today, c.kind) }
+                // Blocks for a preset that isn't today's would be inert, so they also switch today to it.
                 is PlanChange.SetTodayBlocks -> settings.update {
-                    it.copy(routine = it.routine.copy(todayOverride = DayOverride(today, c.kind, Routine.normalized(c.blocks))))
+                    val s = if (Routine.activeKind(it.routine, today) == c.kind) it else withPreset(it, today, c.kind)
+                    s.copy(routine = s.routine.copy(todayOverride = DayOverride(today, c.kind, Routine.normalized(c.blocks))))
                 }
                 is PlanChange.SetPresetBlocks -> settings.update {
                     it.copy(routine = it.routine.copy(presets = it.routine.presets + (c.kind to Routine.normalized(c.blocks))))
