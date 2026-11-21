@@ -41,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.levelup2027.ai.PlanValidator
@@ -62,17 +64,30 @@ private val EXAMPLES = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AdjustSheet(vm: AppViewModel, adjust: AdjustViewModel, onDismiss: () -> Unit, onOpenAiSettings: () -> Unit) {
+fun AdjustSheet(
+    vm: AppViewModel, adjust: AdjustViewModel, onDismiss: () -> Unit, onOpenAiSettings: () -> Unit,
+    title: String = "Adjust my plan",
+    intro: String = "Tell me what changed. I'll suggest specific changes, and nothing happens until you approve them.",
+    listenOnOpen: Boolean = false,
+    onApplied: () -> Unit = {},
+) {
     val state by adjust.state.collectAsState()
     var showConsent by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val startVoice = rememberVoiceInput { text -> adjust.send(text) }
+    // No recognizer: the text field (inside the sheet) takes focus once it is composed.
+    val focusField = listenOnOpen && startVoice == null
+    if (listenOnOpen) LaunchedEffect(Unit) { startVoice?.invoke() }
+    val initialApplied = remember { state.appliedCount }
+    LaunchedEffect(state.appliedCount) { if (state.appliedCount > initialApplied) onApplied() }
 
     ModalBottomSheet(onDismissRequest = { adjust.reset(); onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding().padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Adjust my plan", style = MaterialTheme.typography.titleLarge)
-            Text("Tell me what changed. I'll suggest specific changes, and nothing happens until you approve them.",
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(intro,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             state.turns.forEach { t ->
@@ -138,10 +153,11 @@ fun AdjustSheet(vm: AppViewModel, adjust: AdjustViewModel, onDismiss: () -> Unit
                     EXAMPLES.forEach { e -> AssistChip(onClick = { adjust.setInput(e) }, label = { Text(e) }) }
                 }
             }
+            if (focusField) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
             OutlinedTextField(
                 state.input, adjust::setInput,
                 placeholder = { Text(if (state.question.isNotBlank()) "Your answer" else "What changed?") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 enabled = !state.working,
                 trailingIcon = {
                     Row {

@@ -235,9 +235,15 @@ data class AdjustState(
     val selected: Set<Int> = emptySet(),
     val block: AiBlock? = null,
     val applied: String = "",
+    /** Bumped by each successful reviewed apply, so the host can react (e.g. close the assistant). */
+    val appliedCount: Int = 0,
 )
 
-class AdjustViewModel(private val c: AppContainer) : ViewModel() {
+/** Pure: auto-apply only when the user allowed it, it's not the assistant, nothing needs clarifying, and every change is simple. */
+fun shouldAutoApply(autoApplySimple: Boolean, alwaysConfirm: Boolean, validated: ValidatedChanges, needsClarification: Boolean): Boolean =
+    autoApplySimple && !alwaysConfirm && !needsClarification && validated.allSimple
+
+class AdjustViewModel(private val c: AppContainer, private val alwaysConfirm: Boolean = false) : ViewModel() {
     private val repo = c.repository
     private val _state = MutableStateFlow(AdjustState())
     val state: StateFlow<AdjustState> = _state
@@ -263,15 +269,15 @@ class AdjustViewModel(private val c: AppContainer) : ViewModel() {
             val goals = repo.getGoals()
             val payload = ContextBuilder.adjust(
                 today, LocalTime.now(), tasks, completions, goals, repo.getMilestones(), s.capacity, s.isLowEnergy(today),
-                Repository.hiddenCategories(repo.getCategories()), turns,
+                Repository.hiddenCategories(repo.getCategories()), turns, s.routine,
             )
             runCatching { c.ai.adjust(payload) }
                 .onSuccess { r ->
-                    val validated = ChangeValidator.validate(r.changes, PlanState(today, tasks, completions, goals, s.capacity)) { title ->
+                    val validated = ChangeValidator.validate(r.changes, PlanState(today, tasks, completions, goals, s.capacity, s.routine)) { title ->
                         "t-" + PlanValidator.slug(title).take(20) + "-" + UUID.randomUUID().toString().take(6)
                     }
                     val replyTurn = ChatTurn("assistant", if (r.needsClarification) r.question else r.reply)
-                    if (s.ai.autoApplySimple && validated.allSimple && !r.needsClarification) {
+                    if (shouldAutoApply(s.ai.autoApplySimple, alwaysConfirm, validated, r.needsClarification)) {
                         repo.applyChanges(validated.changes, "AI_ADJUST_AUTO", text)
                         _state.value = _state.value.copy(turns = turns + replyTurn, working = false, reply = r.reply,
                             applied = "Applied: " + validated.changes.joinToString("; ") { it.summary })
@@ -294,7 +300,7 @@ class AdjustViewModel(private val c: AppContainer) : ViewModel() {
         val chosen = p.changes.filterIndexed { i, _ -> i in s.selected }
         if (chosen.isEmpty()) return@launch
         runCatching { repo.applyChanges(chosen, "AI_ADJUST", s.turns.lastOrNull { it.role == "user" }?.text.orEmpty()) }
-            .onSuccess { _state.value = s.copy(proposal = null, applied = "Done: " + chosen.joinToString("; ") { it.summary }) }
+            .onSuccess { _state.value = s.copy(proposal = null, appliedCount = s.appliedCount + 1, applied = "Done: " + chosen.joinToString("; ") { it.summary }) }
             .onFailure { e -> _state.value = s.copy(block = AiBlock.Failed("Couldn't apply: ${e.message?.take(120)}", false)) }
     }
 
